@@ -286,6 +286,7 @@ def main(
     show_fps=False,
     verbose=False,
     profile_startup=False,
+    enable_keypad_pwm: bool = False,
 ) -> None:
     """
     Get this show on the road!
@@ -293,7 +294,8 @@ def main(
     global display_device, display_hardware
 
     display_device = get_display(display_hardware)
-    init_keypad_pwm()
+    if enable_keypad_pwm:
+        init_keypad_pwm()
     setup_dirs()
 
     # Instantiate base keyboard class for keycode
@@ -908,7 +910,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-k",
         "--keyboard",
-        help="Specify which keyboard to use: pi, local or server",
+        help="Specify which keyboard to use: pi, local or server, or touch",
         default="pi",
         required=False,
     )
@@ -1017,6 +1019,11 @@ if __name__ == "__main__":
         from PiFinder import keyboard_pi as keyboard
 
         rlogger.info("using pi keyboard hat")
+
+    elif args.keyboard.lower() == "touch":
+        from PiFinder import keyboard_touch as keyboard  # type: ignore[no-redef]
+
+        rlogger.info("using touchscreen virtual keyboard")
     elif args.keyboard.lower() == "local":
         from PiFinder import keyboard_local as keyboard  # type: ignore[no-redef]
 
@@ -1033,7 +1040,15 @@ if __name__ == "__main__":
             config.Config().set_option("language", args.lang)
 
     try:
-        main(log_helper, args.script, args.fps, args.verbose, args.profile_startup)
+        enable_keypad_pwm = (args.keyboard.lower() == "pi") and (not args.fakehardware)
+        main(
+            log_helper,
+            args.script,
+            args.fps,
+            args.verbose,
+            args.profile_startup,
+            enable_keypad_pwm=enable_keypad_pwm,
+        )
     except Exception:
         rlogger.exception("Exception in main(). Aborting program.")
         os._exit(1)
