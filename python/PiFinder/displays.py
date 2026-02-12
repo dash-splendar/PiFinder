@@ -12,6 +12,12 @@ from luma.lcd.device import st7789
 from PiFinder.ui.fonts import Fonts
 
 
+#DSEdits
+try:
+    import pygame
+except Exception:
+    pygame = None
+
 ColorMask = namedtuple("ColorMask", ["mask", "mode"])
 RED_RGB: ColorMask = ColorMask(np.array([1, 0, 0]), "RGB")
 RED_BGR: ColorMask = ColorMask(np.array([0, 0, 1]), "BGR")
@@ -29,6 +35,49 @@ class Colors:
         arr = self.color_mask * color_intensity
         result = tuple(arr)
         return result
+
+class PygameWindowDevice:
+    """
+    Minimal 'device' shim compatible with PiFinder's expectations:
+      - .mode (string)
+      - .width / .height
+      - .display(PIL.Image)
+      - .show() (optional)
+    """
+    mode = "RGB"
+
+    def __init__(self, out_w=800, out_h=480, fullscreen=True):
+        if pygame is None:
+            raise RuntimeError("pygame is required for DisplayHyperpixel4 but is not installed")
+
+        # If running without X/Wayland and you want direct framebuffer,
+        # you can set these env vars in your systemd service instead:
+        #   SDL_VIDEODRIVER=fbcon
+        #   SDL_FBDEV=/dev/fb0
+        #   SDL_NOMOUSE=0
+        pygame.init()
+
+        flags = pygame.FULLSCREEN if fullscreen else 0
+        self._screen = pygame.display.set_mode((out_w, out_h), flags)
+        pygame.display.set_caption("PiFinder (HyperPixel4)")
+        self.width = out_w
+        self.height = out_h
+
+    def display(self, pil_image: Image.Image):
+        # PiFinder passes a PIL image; convert to RGB.
+        rgb = pil_image.convert("RGB")
+
+        # Convert PIL -> pygame Surface and draw full-frame
+        surf = pygame.image.frombuffer(rgb.tobytes(), rgb.size, "RGB")
+        self._screen.blit(surf, (0, 0))
+        pygame.display.flip()
+
+        # Keep SDL responsive and allow touch/mouse events to flow
+        pygame.event.pump()
+
+    def show(self):
+        # PiFinder may call this on wake/sleep; no-op is fine.
+        return
 
 
 class DisplayBase:
@@ -63,6 +112,66 @@ class DisplayBase:
 
     def set_brightness(self, brightness: int) -> None:
         return None
+
+
+class DisplayHyperpixel4(DisplayBase):
+    """
+    HyperPixel 4.0 display backend.
+
+    Two modes:
+      - compat (default): PiFinder renders at 128x128; we scale into 480x480 on an 800x480 panel.
+      - native: PiFinder renders at 800x480 (requires UI/layout changes elsewhere).
+    """
+
+    def __init__(self, native=False, fullscreen=True):
+        if native:
+            self.resolution = (800, 480)
+            self.titlebar_height = 40
+            self.base_font_size = 24
+        else:
+            self.resolution = (128, 128)
+            self.titlebar_height = 16
+            self.base_font_size = 12
+
+        super().__init__()
+
+        self._native = native
+        self._out_w, self._out_h = (800, 480)
+
+        self.device = PygameWindowDevice(out_w=self._out_w, out_h=self._out_h, fullscreen=fullscreen)
+
+        if not self._native:
+            self._bg = Image.new("RGB", (self._out_w, self._out_h), (0, 0, 0))
+
+        # Save the real device display method so we can call it without recursion
+        self._orig_device_display = self.device.display
+
+        def wrapped_display(pil_img):
+            if self._native:
+                self._orig_device_display(pil_img)
+            else:
+                self._orig_device_display(self._compose_compat_frame(pil_img))
+
+        # Monkeypatch so existing PiFinder code can keep calling device.display(...)
+        self.device.display = wrapped_display
+
+    def show(self):
+        if hasattr(self.device, "show"):
+            self.device.show()
+
+    def _compose_compat_frame(self, ui_img: Image.Image) -> Image.Image:
+        content = ui_img.convert("RGB").resize((480, 480), resample=Image.NEAREST)
+        frame = self._bg.copy()
+        frame.paste(content, (0, 0))
+        return frame
+
+    # Optional helper: safe version that won't recurse
+    def display_image(self, img: Image.Image):
+        if self._native:
+            self._orig_device_display(img)
+        else:
+            self._orig_device_display(self._compose_compat_frame(img))
+
 
 
 class DisplayPygame_128(DisplayBase):
@@ -173,6 +282,10 @@ def get_display(display_hardware: str) -> DisplayBase:
 
     if display_hardware == "st7789":
         return DisplayST7789()
+
+    if display_hardware == "hyperpixel4":
+        # Start with compat mode so you don't have to refactor all UI modules yet.
+        return DisplayHyperpixel4(native=False, fullscreen=True)
 
     else:
         print("Hardware platform not recognized")
