@@ -55,16 +55,12 @@ if [[ ! -e $HIP_MAIN_DAT ]]; then
 fi
 
 # Enable interfaces
-grep -q "dtparam=spi=on" /boot/config.txt || \
-   echo "dtparam=spi=on" | sudo tee -a /boot/config.txt
-grep -q "dtparam=i2c_arm=on" /boot/config.txt || \
-   echo "dtparam=i2c_arm=on" | sudo tee -a /boot/config.txt
-grep -q "dtparam=i2c_arm_baudrate=10000" /boot/config.txt || \
-   echo "dtparam=i2c_arm_baudrate=10000" | sudo tee -a /boot/config.txt
-grep -q "dtoverlay=pwm,pin=13,func=4" /boot/config.txt || \
-   echo "dtoverlay=pwm,pin=13,func=4" | sudo tee -a /boot/config.txt
-grep -q "dtoverlay=uart3" /boot/config.txt || \
-   echo "dtoverlay=uart3" | sudo tee -a /boot/config.txt
+#DSEdit - we are not going to use any of these natively on the Raspi
+#grep -q "dtparam=spi=on" /boot/config.txt || echo "dtparam=spi=on" | sudo tee -a /boot/config.txt
+#grep -q "dtparam=i2c_arm=on" /boot/config.txt || echo "dtparam=i2c_arm=on" | sudo tee -a /boot/config.txt
+#grep -q "dtparam=i2c_arm_baudrate=10000" /boot/config.txt || echo "dtparam=i2c_arm_baudrate=10000" | sudo tee -a /boot/config.txt
+#grep -q "dtoverlay=pwm,pin=13,func=4" /boot/config.txt || echo "dtoverlay=pwm,pin=13,func=4" | sudo tee -a /boot/config.txt
+#grep -q "dtoverlay=uart3" /boot/config.txt || echo "dtoverlay=uart3" | sudo tee -a /boot/config.txt
 # Note: camera types are added lateron by python/PiFinder/switch_camera.py
 
 # Disable unwanted services
