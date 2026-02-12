@@ -1021,7 +1021,7 @@ if __name__ == "__main__":
         rlogger.info("using pi keyboard hat")
 
     elif args.keyboard.lower() == "touch":
-        from PiFinder import keyboard_touch as keyboard  # type: ignore[no-redef]
+        from PiFinder import keyboard_touch_evdev as keyboard  # type: ignore[no-redef]
 
         rlogger.info("using touchscreen virtual keyboard")
     elif args.keyboard.lower() == "local":
