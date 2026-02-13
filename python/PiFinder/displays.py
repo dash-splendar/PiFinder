@@ -11,8 +11,6 @@ from luma.lcd.device import st7789
 
 from PiFinder.ui.fonts import Fonts
 
-
-#DSEdits
 try:
     import pygame
 except Exception:
@@ -28,35 +26,22 @@ class Colors:
     def __init__(self, color_mask: ColorMask, resolution: tuple[int, int]):
         self.color_mask = color_mask[0]
         self.mode = color_mask[1]
-        self.red_image = Image.new("RGB", (resolution[0], resolution[1]), self.get(255))
+        self.red_image = Image.new("RGB", resolution, self.get(255))
 
     @functools.cache
     def get(self, color_intensity):
         arr = self.color_mask * color_intensity
-        result = tuple(arr)
-        return result
+        return tuple(arr)
+
 
 class PygameWindowDevice:
-    """
-    Minimal 'device' shim compatible with PiFinder's expectations:
-      - .mode (string)
-      - .width / .height
-      - .display(PIL.Image)
-      - .show() (optional)
-    """
     mode = "RGB"
 
     def __init__(self, out_w=800, out_h=480, fullscreen=True):
         if pygame is None:
-            raise RuntimeError("pygame is required for DisplayHyperpixel4 but is not installed")
+            raise RuntimeError("pygame required for HyperPixel4")
 
-        # If running without X/Wayland and you want direct framebuffer,
-        # you can set these env vars in your systemd service instead:
-        #   SDL_VIDEODRIVER=fbcon
-        #   SDL_FBDEV=/dev/fb0
-        #   SDL_NOMOUSE=0
         pygame.init()
-
         flags = pygame.FULLSCREEN if fullscreen else 0
         self._screen = pygame.display.set_mode((out_w, out_h), flags)
         pygame.display.set_caption("PiFinder (HyperPixel4)")
@@ -64,19 +49,13 @@ class PygameWindowDevice:
         self.height = out_h
 
     def display(self, pil_image: Image.Image):
-        # PiFinder passes a PIL image; convert to RGB.
         rgb = pil_image.convert("RGB")
-
-        # Convert PIL -> pygame Surface and draw full-frame
         surf = pygame.image.frombuffer(rgb.tobytes(), rgb.size, "RGB")
         self._screen.blit(surf, (0, 0))
         pygame.display.flip()
-
-        # Keep SDL responsive and allow touch/mouse events to flow
         pygame.event.pump()
 
     def show(self):
-        # PiFinder may call this on wake/sleep; no-op is fine.
         return
 
 
@@ -102,26 +81,16 @@ class DisplayBase:
             self.resolution[0],
         )
 
-        # calculated display params
-        self.centerX = int(self.resolution[0] / 2)
-        self.centerY = int(self.resolution[1] / 2)
-        self.fov_res = min(self.resolution[0], self.resolution[1])
-
-        self.resX = self.resolution[0]
-        self.resY = self.resolution[1]
+        self.centerX = self.resolution[0] // 2
+        self.centerY = self.resolution[1] // 2
+        self.fov_res = min(self.resolution)
+        self.resX, self.resY = self.resolution
 
     def set_brightness(self, brightness: int) -> None:
         return None
 
 
 class DisplayHyperpixel4(DisplayBase):
-    """
-    HyperPixel 4.0 display backend.
-
-    Two modes:
-      - compat (default): PiFinder renders at 128x128; we scale into 480x480 on an 800x480 panel.
-      - native: PiFinder renders at 800x480 (requires UI/layout changes elsewhere).
-    """
 
     def __init__(self, native=False, fullscreen=True):
         if native:
@@ -137,13 +106,11 @@ class DisplayHyperpixel4(DisplayBase):
 
         self._native = native
         self._out_w, self._out_h = (800, 480)
-
-        self.device = PygameWindowDevice(out_w=self._out_w, out_h=self._out_h, fullscreen=fullscreen)
+        self.device = PygameWindowDevice(self._out_w, self._out_h, fullscreen)
 
         if not self._native:
             self._bg = Image.new("RGB", (self._out_w, self._out_h), (0, 0, 0))
 
-        # Save the real device display method so we can call it without recursion
         self._orig_device_display = self.device.display
 
         def wrapped_display(pil_img):
@@ -152,30 +119,21 @@ class DisplayHyperpixel4(DisplayBase):
             else:
                 self._orig_device_display(self._compose_compat_frame(pil_img))
 
-        # Monkeypatch so existing PiFinder code can keep calling device.display(...)
         self.device.display = wrapped_display
 
-    def show(self):
-        if hasattr(self.device, "show"):
-            self.device.show()
-
     def _compose_compat_frame(self, ui_img: Image.Image) -> Image.Image:
-        content = ui_img.convert("RGB").resize((480, 480), resample=Image.NEAREST)
+        content = ui_img.convert("RGB").resize((480, 480), Image.NEAREST)
         frame = self._bg.copy()
         frame.paste(content, (0, 0))
 
-        # ----- Touch button overlay (right 320x480 panel) -----
         draw = ImageDraw.Draw(frame)
         font = ImageFont.load_default()
 
-        # Separator line between UI and touch panel
         draw.line((480, 0, 480, 479), fill=(80, 80, 80), width=2)
 
         def draw_button(rect, label):
             x1, y1, x2, y2 = rect
-            draw.rectangle((x1, y1, x2, y2), outline=(220, 220, 220), width=2)
-
-            # Center label
+            draw.rectangle(rect, outline=(220, 220, 220), width=2)
             bbox = draw.textbbox((0, 0), label, font=font)
             tw = bbox[2] - bbox[0]
             th = bbox[3] - bbox[1]
@@ -183,34 +141,24 @@ class DisplayHyperpixel4(DisplayBase):
             ty = y1 + (y2 - y1 - th) / 2
             draw.text((tx, ty), label, fill=(255, 255, 255), font=font)
 
-        # Easy-format: (label, (x1,y1,x2,y2))
-        # Right panel is x=480..799, y=0..479
         buttons = [
-            # D-pad + Square (5)
             ("UP", (600, 80, 690, 150)),
             ("LEFT", (510, 160, 600, 230)),
-            ("SQ", (600, 160, 690, 230)),  # maps to SQUARE
+            ("SQ", (600, 160, 690, 230)),
             ("RIGHT", (690, 160, 790, 230)),
             ("DOWN", (600, 240, 690, 310)),
-
-            # +/- / ENTER (3)
             ("-", (510, 330, 610, 395)),
             ("+", (620, 330, 720, 395)),
             ("ENT", (730, 330, 790, 395)),
-
-            # Full keypad 0-9 in a 3x4 grid (10)
             ("1", (510, 400, 590, 440)),
             ("2", (600, 400, 680, 440)),
             ("3", (690, 400, 790, 440)),
-
             ("4", (510, 445, 590, 479)),
             ("5", (600, 445, 680, 479)),
             ("6", (690, 445, 790, 479)),
-
             ("7", (510, 355, 590, 395)),
             ("8", (600, 355, 680, 395)),
             ("9", (690, 355, 790, 395)),
-
             ("0", (600, 310, 680, 350)),
         ]
 
@@ -219,128 +167,57 @@ class DisplayHyperpixel4(DisplayBase):
 
         return frame
 
-# Optional helper: safe version that won't recurse
-def display_image(self, img: Image.Image):
-    if self._native:
-        self._orig_device_display(img)
-    else:
-        self._orig_device_display(self._compose_compat_frame(img))
-
-
 
 class DisplayPygame_128(DisplayBase):
-resolution = (128, 128)
-
-def __init__(self):
-    from luma.emulator.device import pygame
-
-    # init display  (SPI hardware)
-    pygame = pygame(
-        width=128,
-        height=128,
-        rotate=0,
-        mode="RGB",
-        transform="scale2x",
-        scale=2,
-        frame_rate=60,
-    )
-    self.device = pygame
-    super().__init__()
-
-
-class DisplayPygame_320(DisplayBase):
-resolution = (320, 240)
-
-def __init__(self):
-    from luma.emulator.device import pygame
-
-    # init display  (SPI hardware)
-    pygame = pygame(
-        width=320,
-        height=240,
-        rotate=0,
-        mode="RGB",
-        frame_rate=60,
-    )
-    self.device = pygame
-    super().__init__()
-
-
-class DisplaySSD1351(DisplayBase):
-resolution = (128, 128)
-
-def __init__(self):
-    # init display  (SPI hardware)
-    serial = spi(device=0, port=0, bus_speed_hz=40000000)
-    device_serial = ssd1351(serial, rotate=0, bgr=True)
-
-    device_serial.capabilities(
-        width=self.resolution[0], height=self.resolution[1], rotate=0, mode="RGB"
-    )
-    self.device = device_serial
-    super().__init__()
-
-def set_brightness(self, level):
-    """
-        Sets oled brightness
-        0-255
-        """
-        self.device.contrast(level)
-
-
-class DisplayST7789_128(DisplayBase):
     resolution = (128, 128)
 
     def __init__(self):
-        # init display  (SPI hardware)
-        serial = spi(device=0, port=0, bus_speed_hz=52000000)
-        device_serial = st7789(serial, bgr=True)
-
-        device_serial.capabilities(
-            width=self.resolution[0], height=self.resolution[1], rotate=0, mode="RGB"
-        )
-        self.device = device_serial
+        from luma.emulator.device import pygame
+        self.device = pygame(width=128, height=128, mode="RGB", scale=2)
         super().__init__()
+
+
+class DisplayPygame_320(DisplayBase):
+    resolution = (320, 240)
+
+    def __init__(self):
+        from luma.emulator.device import pygame
+        self.device = pygame(width=320, height=240, mode="RGB")
+        super().__init__()
+
+
+class DisplaySSD1351(DisplayBase):
+    resolution = (128, 128)
+
+    def __init__(self):
+        serial = spi(device=0, port=0, bus_speed_hz=40000000)
+        self.device = ssd1351(serial, rotate=0, bgr=True)
+        super().__init__()
+
+    def set_brightness(self, level):
+        self.device.contrast(level)
 
 
 class DisplayST7789(DisplayBase):
     resolution = (320, 240)
-    titlebar_height = 22
-    base_font_size = 16
-    bold_font_size = 19
-    small_font_size = 13
-    large_font_size = 24
-    huge_font_size = 70
 
     def __init__(self):
-        # init display  (SPI hardware)
         serial = spi(device=0, port=0, bus_speed_hz=52000000)
-        device_serial = st7789(serial, bgr=True)
-
-        device_serial.capabilities(
-            width=self.resolution[0], height=self.resolution[1], rotate=0, mode="RGB"
-        )
-        self.device = device_serial
+        self.device = st7789(serial, bgr=True)
         super().__init__()
 
 
 def get_display(display_hardware: str) -> DisplayBase:
     if display_hardware == "pg_128":
         return DisplayPygame_128()
-
     if display_hardware == "pg_320":
         return DisplayPygame_320()
-
     if display_hardware == "ssd1351":
         return DisplaySSD1351()
-
     if display_hardware == "st7789":
         return DisplayST7789()
-
     if display_hardware == "hyperpixel4":
-        # Start with compat mode so you don't have to refactor all UI modules yet.
         return DisplayHyperpixel4(native=False, fullscreen=True)
 
-    else:
-        print("Hardware platform not recognized")
-        return DisplaySSD1351()
+    print("Hardware platform not recognized")
+    return DisplaySSD1351()
