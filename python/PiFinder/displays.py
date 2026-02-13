@@ -2,7 +2,7 @@ import functools
 from collections import namedtuple
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 import luma.core.device
 from luma.core.interface.serial import spi
@@ -163,71 +163,125 @@ class DisplayHyperpixel4(DisplayBase):
         content = ui_img.convert("RGB").resize((480, 480), resample=Image.NEAREST)
         frame = self._bg.copy()
         frame.paste(content, (0, 0))
+
+        # ----- Touch button overlay (right 320x480 panel) -----
+        draw = ImageDraw.Draw(frame)
+        font = ImageFont.load_default()
+
+        # Separator line between UI and touch panel
+        draw.line((480, 0, 480, 479), fill=(80, 80, 80), width=2)
+
+        def draw_button(rect, label):
+            x1, y1, x2, y2 = rect
+            draw.rectangle((x1, y1, x2, y2), outline=(220, 220, 220), width=2)
+
+            # Center label
+            bbox = draw.textbbox((0, 0), label, font=font)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            tx = x1 + (x2 - x1 - tw) / 2
+            ty = y1 + (y2 - y1 - th) / 2
+            draw.text((tx, ty), label, fill=(255, 255, 255), font=font)
+
+        # Easy-format: (label, (x1,y1,x2,y2))
+        # Right panel is x=480..799, y=0..479
+        buttons = [
+            # D-pad + Square (5)
+            ("UP", (600, 80, 690, 150)),
+            ("LEFT", (510, 160, 600, 230)),
+            ("SQ", (600, 160, 690, 230)),  # maps to SQUARE
+            ("RIGHT", (690, 160, 790, 230)),
+            ("DOWN", (600, 240, 690, 310)),
+
+            # +/- / ENTER (3)
+            ("-", (510, 330, 610, 395)),
+            ("+", (620, 330, 720, 395)),
+            ("ENT", (730, 330, 790, 395)),
+
+            # Full keypad 0-9 in a 3x4 grid (10)
+            ("1", (510, 400, 590, 440)),
+            ("2", (600, 400, 680, 440)),
+            ("3", (690, 400, 790, 440)),
+
+            ("4", (510, 445, 590, 479)),
+            ("5", (600, 445, 680, 479)),
+            ("6", (690, 445, 790, 479)),
+
+            ("7", (510, 355, 590, 395)),
+            ("8", (600, 355, 680, 395)),
+            ("9", (690, 355, 790, 395)),
+
+            ("0", (600, 310, 680, 350)),
+        ]
+
+        for label, rect in buttons:
+            draw_button(rect, label)
+
         return frame
 
-    # Optional helper: safe version that won't recurse
-    def display_image(self, img: Image.Image):
-        if self._native:
-            self._orig_device_display(img)
-        else:
-            self._orig_device_display(self._compose_compat_frame(img))
+# Optional helper: safe version that won't recurse
+def display_image(self, img: Image.Image):
+    if self._native:
+        self._orig_device_display(img)
+    else:
+        self._orig_device_display(self._compose_compat_frame(img))
 
 
 
 class DisplayPygame_128(DisplayBase):
-    resolution = (128, 128)
+resolution = (128, 128)
 
-    def __init__(self):
-        from luma.emulator.device import pygame
+def __init__(self):
+    from luma.emulator.device import pygame
 
-        # init display  (SPI hardware)
-        pygame = pygame(
-            width=128,
-            height=128,
-            rotate=0,
-            mode="RGB",
-            transform="scale2x",
-            scale=2,
-            frame_rate=60,
-        )
-        self.device = pygame
-        super().__init__()
+    # init display  (SPI hardware)
+    pygame = pygame(
+        width=128,
+        height=128,
+        rotate=0,
+        mode="RGB",
+        transform="scale2x",
+        scale=2,
+        frame_rate=60,
+    )
+    self.device = pygame
+    super().__init__()
 
 
 class DisplayPygame_320(DisplayBase):
-    resolution = (320, 240)
+resolution = (320, 240)
 
-    def __init__(self):
-        from luma.emulator.device import pygame
+def __init__(self):
+    from luma.emulator.device import pygame
 
-        # init display  (SPI hardware)
-        pygame = pygame(
-            width=320,
-            height=240,
-            rotate=0,
-            mode="RGB",
-            frame_rate=60,
-        )
-        self.device = pygame
-        super().__init__()
+    # init display  (SPI hardware)
+    pygame = pygame(
+        width=320,
+        height=240,
+        rotate=0,
+        mode="RGB",
+        frame_rate=60,
+    )
+    self.device = pygame
+    super().__init__()
 
 
 class DisplaySSD1351(DisplayBase):
-    resolution = (128, 128)
+resolution = (128, 128)
 
-    def __init__(self):
-        # init display  (SPI hardware)
-        serial = spi(device=0, port=0, bus_speed_hz=40000000)
-        device_serial = ssd1351(serial, rotate=0, bgr=True)
+def __init__(self):
+    # init display  (SPI hardware)
+    serial = spi(device=0, port=0, bus_speed_hz=40000000)
+    device_serial = ssd1351(serial, rotate=0, bgr=True)
 
-        device_serial.capabilities(
-            width=self.resolution[0], height=self.resolution[1], rotate=0, mode="RGB"
-        )
-        self.device = device_serial
-        super().__init__()
+    device_serial.capabilities(
+        width=self.resolution[0], height=self.resolution[1], rotate=0, mode="RGB"
+    )
+    self.device = device_serial
+    super().__init__()
 
-    def set_brightness(self, level):
-        """
+def set_brightness(self, level):
+    """
         Sets oled brightness
         0-255
         """
