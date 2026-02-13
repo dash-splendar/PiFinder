@@ -16,6 +16,40 @@ try:
 except Exception:
     pygame = None
 
+
+# ---------------- HyperPixel4 output + virtual button layout ----------------
+
+HYPERPIXEL_OUT_W, HYPERPIXEL_OUT_H = 800, 480
+
+# Screen-space button rectangles (800x480 coordinates)
+# Right panel is x=480..799, y=0..479
+HYPERPIXEL_VIRTUAL_BUTTONS = [
+    # --- Top cluster (all same size) ---
+    ("UP",    (591,   6, 687, 102)),
+
+    ("LEFT",  (486, 111, 582, 207)),
+    ("ENTER", (591, 111, 687, 207)),
+    ("RIGHT", (696, 111, 792, 207)),
+
+    ("MINUS", (486, 216, 582, 312)),
+    ("DOWN",  (591, 216, 687, 312)),
+    ("PLUS",  (696, 216, 792, 312)),
+
+    # --- Bottom keypad (2 rows x 5 cols, taller) ---
+    ("0",     (487, 321, 544, 392)),
+    ("1",     (549, 321, 606, 392)),
+    ("2",     (611, 321, 668, 392)),
+    ("3",     (673, 321, 730, 392)),
+    ("4",     (735, 321, 792, 392)),
+
+    ("5",     (487, 401, 544, 472)),
+    ("6",     (549, 401, 606, 472)),
+    ("7",     (611, 401, 668, 472)),
+    ("8",     (673, 401, 730, 472)),
+    ("9",     (735, 401, 792, 472)),
+]
+
+
 ColorMask = namedtuple("ColorMask", ["mask", "mode"])
 RED_RGB: ColorMask = ColorMask(np.array([1, 0, 0]), "RGB")
 RED_BGR: ColorMask = ColorMask(np.array([0, 0, 1]), "BGR")
@@ -37,7 +71,7 @@ class Colors:
 class PygameWindowDevice:
     mode = "RGB"
 
-    def __init__(self, out_w=800, out_h=480, fullscreen=True):
+    def __init__(self, out_w=HYPERPIXEL_OUT_W, out_h=HYPERPIXEL_OUT_H, fullscreen=True):
         if pygame is None:
             raise RuntimeError("pygame required for HyperPixel4")
 
@@ -91,10 +125,16 @@ class DisplayBase:
 
 
 class DisplayHyperpixel4(DisplayBase):
+    """
+    Compatibility mode:
+      - PiFinder UI renders at 128x128
+      - scaled to 480x480 on the left
+      - right 320px is reserved for virtual buttons
+    """
 
     def __init__(self, native=False, fullscreen=True):
         if native:
-            self.resolution = (800, 480)
+            self.resolution = (HYPERPIXEL_OUT_W, HYPERPIXEL_OUT_H)
             self.titlebar_height = 40
             self.base_font_size = 24
         else:
@@ -105,7 +145,7 @@ class DisplayHyperpixel4(DisplayBase):
         super().__init__()
 
         self._native = native
-        self._out_w, self._out_h = (800, 480)
+        self._out_w, self._out_h = (HYPERPIXEL_OUT_W, HYPERPIXEL_OUT_H)
         self.device = PygameWindowDevice(self._out_w, self._out_h, fullscreen)
 
         if not self._native:
@@ -129,6 +169,7 @@ class DisplayHyperpixel4(DisplayBase):
         draw = ImageDraw.Draw(frame)
         font = ImageFont.load_default()
 
+        # divider line between UI + button panel
         draw.line((480, 0, 480, 479), fill=(80, 80, 80), width=2)
 
         def draw_button(rect, label):
@@ -141,33 +182,7 @@ class DisplayHyperpixel4(DisplayBase):
             ty = y1 + (y2 - y1 - th) / 2
             draw.text((tx, ty), label, fill=(255, 255, 255), font=font)
 
-        buttons = [
-            # --- Top cluster (all same size) ---
-            ("UP", (591, 6, 687, 102)),
-
-            ("LEFT", (486, 111, 582, 207)),
-            ("ENTER", (591, 111, 687, 207)),
-            ("RIGHT", (696, 111, 792, 207)),
-
-            ("MINUS", (486, 216, 582, 312)),
-            ("DOWN", (591, 216, 687, 312)),
-            ("PLUS", (696, 216, 792, 312)),
-
-            # --- Bottom keypad (2 rows x 5 cols, taller) ---
-            ("0", (487, 321, 544, 392)),
-            ("1", (549, 321, 606, 392)),
-            ("2", (611, 321, 668, 392)),
-            ("3", (673, 321, 730, 392)),
-            ("4", (735, 321, 792, 392)),
-
-            ("5", (487, 401, 544, 472)),
-            ("6", (549, 401, 606, 472)),
-            ("7", (611, 401, 668, 472)),
-            ("8", (673, 401, 730, 472)),
-            ("9", (735, 401, 792, 472)),
-        ]
-
-        for label, rect in buttons:
+        for label, rect in HYPERPIXEL_VIRTUAL_BUTTONS:
             draw_button(rect, label)
 
         return frame

@@ -1,40 +1,40 @@
 import os
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 
 from evdev import InputDevice, ecodes
 
 from PiFinder.keyboard_interface import KeyboardInterface
 from PiFinder.multiproclogging import MultiprocLogging
 
+SCREEN_W = 800
+SCREEN_H = 480
 
-# Screen-space button rectangles (800x480 coordinates), inclusive bounds.
-# Right panel is x=480..799, y=0..479
-BUTTONS = [
-    # --- Top cluster (all same size) ---
-    ("UP",    (591,   6, 687, 102)),
 
-    ("LEFT",  (486, 111, 582, 207)),
-    ("ENTER", (591, 111, 687, 207)),
-    ("RIGHT", (696, 111, 792, 207)),
-
-    ("MINUS", (486, 216, 582, 312)),
-    ("DOWN",  (591, 216, 687, 312)),
-    ("PLUS",  (696, 216, 792, 312)),
-
-    # --- Bottom keypad (2 rows x 5 cols) ---
-    ("0",     (487, 321, 544, 392)),
-    ("1",     (549, 321, 606, 392)),
-    ("2",     (611, 321, 668, 392)),
-    ("3",     (673, 321, 730, 392)),
-    ("4",     (735, 321, 792, 392)),
-
-    ("5",     (487, 401, 544, 472)),
-    ("6",     (549, 401, 606, 472)),
-    ("7",     (611, 401, 668, 472)),
-    ("8",     (673, 401, 730, 472)),
-    ("9",     (735, 401, 792, 472)),
-]
+# Try to import the authoritative button rects from the display module so drawing + hit test match.
+try:
+    from PiFinder.ui.displays import HYPERPIXEL_VIRTUAL_BUTTONS as BUTTONS
+except Exception:
+    # Fallback: keep a local copy (should match displays.py)
+    BUTTONS = [
+        ("UP",    (591,   6, 687, 102)),
+        ("LEFT",  (486, 111, 582, 207)),
+        ("ENTER", (591, 111, 687, 207)),
+        ("RIGHT", (696, 111, 792, 207)),
+        ("MINUS", (486, 216, 582, 312)),
+        ("DOWN",  (591, 216, 687, 312)),
+        ("PLUS",  (696, 216, 792, 312)),
+        ("0",     (487, 321, 544, 392)),
+        ("1",     (549, 321, 606, 392)),
+        ("2",     (611, 321, 668, 392)),
+        ("3",     (673, 321, 730, 392)),
+        ("4",     (735, 321, 792, 392)),
+        ("5",     (487, 401, 544, 472)),
+        ("6",     (549, 401, 606, 472)),
+        ("7",     (611, 401, 668, 472)),
+        ("8",     (673, 401, 730, 472)),
+        ("9",     (735, 401, 792, 472)),
+    ]
 
 
 def _hit_test_button(x: int, y: int) -> Optional[str]:
@@ -61,22 +61,38 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _scale(val: int, vmin: int, vmax: int, out_max: int) -> int:
+    """
+    Scale val from [vmin, vmax] -> [0, out_max], clamped.
+    """
+    if vmax == vmin:
+        return 0
+    x = int((val - vmin) * out_max / (vmax - vmin))
+    if x < 0:
+        return 0
+    if x > out_max:
+        return out_max
+    return x
+
+
 class KeyboardTouchEvdev(KeyboardInterface):
     """
-    Touchscreen -> PiFinder keycodes, using evdev.
+    Touchscreen -> PiFinder keycodes (HyperPixel4 landscape-friendly).
 
-    Notes:
-    - HyperPixel touch typically reports 0..799, 0..479 already.
-    - We still scale from absinfo ranges to be safe.
-    - Touch-down/up detection supports:
-        * ABS_MT_TRACKING_ID (preferred)
-        * BTN_TOUCH
-        * ABS_PRESSURE fallback
-    - Optional transforms (if rotation ever needed):
-        PIFINDER_TOUCH_ROT = 0|90|180|270
-        PIFINDER_TOUCH_SWAPXY = 0/1
-        PIFINDER_TOUCH_INVERTX = 0/1
-        PIFINDER_TOUCH_INVERTY = 0/1
+    HyperPixel4 in landscape often reports:
+      - one axis with range ~0..479 (short)
+      - the other with range ~0..799 (long)
+    but those axes may be swapped relative to the screen, and one axis may be inverted.
+
+    We:
+      1) read absinfo ranges
+      2) auto-detect "swapped axes" when ranges resemble 480 vs 800
+      3) in that case, map raw_x->screen_y and raw_y->screen_x and default invert-x
+      4) still allow env overrides:
+          PIFINDER_TOUCH_ROT = 0|90|180|270
+          PIFINDER_TOUCH_SWAPXY = 0/1     (applies AFTER raw->screen mapping)
+          PIFINDER_TOUCH_INVERTX = 0/1
+          PIFINDER_TOUCH_INVERTY = 0/1
     """
 
     def __init__(self, keyboard_queue, dev_path: str, hold_time_s: float = 1.0):
@@ -85,7 +101,6 @@ class KeyboardTouchEvdev(KeyboardInterface):
         self.dev = InputDevice(dev_path)
         self.hold_time_s = hold_time_s
 
-        # --- Robust abs range detection (do NOT rely on capabilities membership) ---
         def _try_absinfo(code):
             try:
                 return self.dev.absinfo(code)
@@ -95,17 +110,36 @@ class KeyboardTouchEvdev(KeyboardInterface):
         ax = _try_absinfo(ecodes.ABS_MT_POSITION_X) or _try_absinfo(ecodes.ABS_X)
         ay = _try_absinfo(ecodes.ABS_MT_POSITION_Y) or _try_absinfo(ecodes.ABS_Y)
 
-        # If device reports exactly 0..799/0..479 (your case), this becomes identity.
-        self.abs_x_min, self.abs_x_max = (ax.min, ax.max) if ax else (0, 799)
-        self.abs_y_min, self.abs_y_max = (ay.min, ay.max) if ay else (0, 479)
+        # Raw ranges from device (what the driver reports)
+        self.raw_x_min, self.raw_x_max = (ax.min, ax.max) if ax else (0, SCREEN_W - 1)
+        self.raw_y_min, self.raw_y_max = (ay.min, ay.max) if ay else (0, SCREEN_H - 1)
 
-        # --- Optional transforms ---
+        raw_x_span = self.raw_x_max - self.raw_x_min
+        raw_y_span = self.raw_y_max - self.raw_y_min
+
+        # Heuristic: HyperPixel landscape "swap" case tends to look like spans ~800 and ~480 but swapped.
+        # If one span is "long-ish" (>=700) and the other is "short-ish" (<=520), we treat it specially.
+        looks_like_hyperpixel_spans = (
+            (raw_x_span >= 700 and raw_y_span <= 520) or
+            (raw_y_span >= 700 and raw_x_span <= 520)
+        )
+
+        # Auto mapping choice:
+        # If raw_x is the LONG axis (≈800), that usually corresponds to screen_y (≈480) per your test.
+        # And raw_y is SHORT (≈480), corresponds to screen_x (≈800) and is inverted.
+        self._hyperpixel_swap_mapping = bool(looks_like_hyperpixel_spans and raw_x_span >= raw_y_span)
+
+        # User overrides (post-mapping screen-space transforms)
         self.rot = _env_int("PIFINDER_TOUCH_ROT", 0) % 360
         self.swapxy = _env_bool("PIFINDER_TOUCH_SWAPXY", False)
         self.invertx = _env_bool("PIFINDER_TOUCH_INVERTX", False)
         self.inverty = _env_bool("PIFINDER_TOUCH_INVERTY", False)
 
-        # --- Touch state ---
+        # If we detected the HyperPixel swap mapping and user didn't explicitly set invert,
+        # default invert X to match your observed corners (raw_y decreases to the right).
+        self._default_invertx_for_hyperpixel = self._hyperpixel_swap_mapping and ("PIFINDER_TOUCH_INVERTX" not in os.environ)
+
+        # Touch state
         self._x = 0
         self._y = 0
         self._touch_down = False
@@ -113,8 +147,10 @@ class KeyboardTouchEvdev(KeyboardInterface):
         self._down_keycode: Optional[int] = None
         self._long_sent = False
 
-        # pressure fallback
-        self._pressure = 0
+        # Multi-touch slot state
+        self._current_slot = 0
+        self._slots: Dict[int, Dict[str, Any]] = {}  # slot -> {"x":int|None, "y":int|None, "active":bool}
+        self._pending = False
 
         # Map labels -> PiFinder keycodes
         self.label_to_keycode = {
@@ -122,7 +158,7 @@ class KeyboardTouchEvdev(KeyboardInterface):
             "DOWN": self.DOWN,
             "LEFT": self.LEFT,
             "RIGHT": self.RIGHT,
-            "ENTER": self.SQUARE,   # PiFinder uses SQUARE as enter/options
+            "ENTER": self.SQUARE,
             "PLUS": self.PLUS,
             "MINUS": self.MINUS,
             "0": 0,
@@ -137,41 +173,63 @@ class KeyboardTouchEvdev(KeyboardInterface):
             "9": 9,
         }
 
+    def _ensure_slot(self, i: int) -> None:
+        if i not in self._slots:
+            self._slots[i] = {"x": None, "y": None, "active": False}
+
     # ----------------- coordinate mapping -----------------
 
-    def _scale_x(self, x_raw: int) -> int:
-        if self.abs_x_max == self.abs_x_min:
-            return 0
-        x = int((x_raw - self.abs_x_min) * 799 / (self.abs_x_max - self.abs_x_min))
-        return max(0, min(799, x))
+    def _raw_to_screen(self, raw_x: int, raw_y: int) -> Tuple[int, int]:
+        """
+        Convert raw device coords to screen pixel coords (0..799, 0..479),
+        handling HyperPixel landscape swapped axes case.
+        """
+        if self._hyperpixel_swap_mapping:
+            # raw_x (long span) -> screen_y (0..479)
+            y = _scale(raw_x, self.raw_x_min, self.raw_x_max, SCREEN_H - 1)
+            # raw_y (short span) -> screen_x (0..799)
+            x = _scale(raw_y, self.raw_y_min, self.raw_y_max, SCREEN_W - 1)
 
-    def _scale_y(self, y_raw: int) -> int:
-        if self.abs_y_max == self.abs_y_min:
-            return 0
-        y = int((y_raw - self.abs_y_min) * 479 / (self.abs_y_max - self.abs_y_min))
-        return max(0, min(479, y))
+            # default invert-x for your observed corner mapping
+            if self._default_invertx_for_hyperpixel:
+                x = (SCREEN_W - 1) - x
+        else:
+            x = _scale(raw_x, self.raw_x_min, self.raw_x_max, SCREEN_W - 1)
+            y = _scale(raw_y, self.raw_y_min, self.raw_y_max, SCREEN_H - 1)
+
+        return x, y
 
     def _apply_transform(self, x: int, y: int) -> Tuple[int, int]:
-        # Swap first (if requested)
+        # Optional swap in SCREEN space (rare, but kept for manual overrides)
         if self.swapxy:
             x, y = y, x
 
-        # Rotate around the full screen dimensions (800x480)
-        # Coordinates are in 0..799 and 0..479
+        # Rotate around full screen dimensions (800x480)
         if self.rot == 90:
-            x, y = y, 479 - x
+            x, y = y, (SCREEN_H - 1) - x
         elif self.rot == 180:
-            x, y = 799 - x, 479 - y
+            x, y = (SCREEN_W - 1) - x, (SCREEN_H - 1) - y
         elif self.rot == 270:
-            x, y = 799 - y, x
+            x, y = (SCREEN_W - 1) - y, x
 
-        # Invert after rotation
+        # Optional manual inversion (post-rotate)
         if self.invertx:
-            x = 799 - x
+            x = (SCREEN_W - 1) - x
         if self.inverty:
-            y = 479 - y
+            y = (SCREEN_H - 1) - y
 
-        return max(0, min(799, x)), max(0, min(479, y))
+        # clamp
+        if x < 0:
+            x = 0
+        elif x > SCREEN_W - 1:
+            x = SCREEN_W - 1
+
+        if y < 0:
+            y = 0
+        elif y > SCREEN_H - 1:
+            y = SCREEN_H - 1
+
+        return x, y
 
     # ----------------- key emission -----------------
 
@@ -221,47 +279,53 @@ class KeyboardTouchEvdev(KeyboardInterface):
     def run(self, log_queue):
         MultiprocLogging.configurer(log_queue)
 
-        # We do NOT depend on capability membership checks; we just react to events we see.
-        x_raw = None
-        y_raw = None
-
         for ev in self.dev.read_loop():
             if ev.type == ecodes.EV_ABS:
-                # Position updates
-                if ev.code in (ecodes.ABS_MT_POSITION_X, ecodes.ABS_X):
-                    x_raw = ev.value
+                if ev.code == ecodes.ABS_MT_SLOT:
+                    self._current_slot = ev.value
+                    self._ensure_slot(self._current_slot)
+                    self._pending = True
+
+                elif ev.code == ecodes.ABS_MT_TRACKING_ID:
+                    self._ensure_slot(self._current_slot)
+                    self._slots[self._current_slot]["active"] = (ev.value != -1)
+                    self._pending = True
+
+                elif ev.code in (ecodes.ABS_MT_POSITION_X, ecodes.ABS_X):
+                    self._ensure_slot(self._current_slot)
+                    self._slots[self._current_slot]["x"] = ev.value
+                    self._pending = True
+
                 elif ev.code in (ecodes.ABS_MT_POSITION_Y, ecodes.ABS_Y):
-                    y_raw = ev.value
-                elif ev.code in (ecodes.ABS_PRESSURE,):
-                    self._pressure = ev.value
+                    self._ensure_slot(self._current_slot)
+                    self._slots[self._current_slot]["y"] = ev.value
+                    self._pending = True
 
-                # Touch down/up via MT tracking id
-                if ev.code == ecodes.ABS_MT_TRACKING_ID:
-                    if ev.value >= 0 and not self._touch_down:
+            elif ev.type == ecodes.EV_SYN and ev.code == ecodes.SYN_REPORT:
+                if not self._pending:
+                    # still do long-press timing checks below
+                    pass
+                self._pending = False
+
+                # Choose first active slot with valid coords
+                chosen = None
+                for s in self._slots.values():
+                    if s.get("active") and s.get("x") is not None and s.get("y") is not None:
+                        chosen = s
+                        break
+                if chosen is not None:
+                    raw_x = int(chosen["x"])
+                    raw_y = int(chosen["y"])
+
+                    x0, y0 = self._raw_to_screen(raw_x, raw_y)
+                    self._x, self._y = self._apply_transform(x0, y0)
+
+                    # Touch down/up state transitions:
+                    # Prefer MT tracking id (slot active flag). If any slot active, we're "down".
+                    any_active = any(s.get("active") for s in self._slots.values())
+                    if any_active and not self._touch_down:
                         self._touch_down_event()
-                    elif ev.value == -1 and self._touch_down:
-                        self._touch_up_event()
-
-                # If we have coordinates, update pixel coords
-                if x_raw is not None and y_raw is not None:
-                    x_px = self._scale_x(x_raw)
-                    y_px = self._scale_y(y_raw)
-                    self._x, self._y = self._apply_transform(x_px, y_px)
-
-                # Fallback touch down/up using pressure (only if no tracking-id behavior)
-                # Some panels will drive ABS_PRESSURE > 0 while finger is down.
-                if ev.code == ecodes.ABS_PRESSURE:
-                    if self._pressure > 0 and not self._touch_down:
-                        self._touch_down_event()
-                    elif self._pressure == 0 and self._touch_down:
-                        self._touch_up_event()
-
-            elif ev.type == ecodes.EV_KEY:
-                # Touch down/up via BTN_TOUCH
-                if ev.code == ecodes.BTN_TOUCH:
-                    if ev.value == 1 and not self._touch_down:
-                        self._touch_down_event()
-                    elif ev.value == 0 and self._touch_down:
+                    elif (not any_active) and self._touch_down:
                         self._touch_up_event()
 
             # Long press check
@@ -272,6 +336,5 @@ class KeyboardTouchEvdev(KeyboardInterface):
 
 
 def run_keyboard(q, shared_state, log_queue, bloom_remap=False):
-    # Use env var override, otherwise default to HyperPixel's i2c touchscreen path
     dev_path = os.environ.get("PIFINDER_TOUCH_DEV", "/dev/input/by-path/platform-i2c@0-event")
     KeyboardTouchEvdev(q, dev_path=dev_path).run(log_queue)
