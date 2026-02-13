@@ -37,6 +37,11 @@ SQM_CALCULATION_INTERVAL_SECONDS = 5.0
 def create_sqm_calculator(shared_state):
     """Create a new SQM calculator instance with current calibration."""
     camera_type = shared_state.camera_type()
+
+    #DSEdit - bypass for testing mode
+    if camera_type == "none":
+        camera_type = "hq"
+
     camera_type_processed = f"{camera_type}_processed"
 
     logger.info(f"Creating SQM calculator for camera: {camera_type_processed}")
