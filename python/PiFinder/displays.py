@@ -24,7 +24,6 @@ HYPERPIXEL_OUT_W, HYPERPIXEL_OUT_H = 800, 480
 # Screen-space button rectangles (800x480 coordinates)
 # Right panel is x=480..799, y=0..479
 HYPERPIXEL_VIRTUAL_BUTTONS = [
-    # --- Top cluster (all same size) ---
     ("UP",    (591,   6, 687, 102)),
 
     ("LEFT",  (486, 111, 582, 207)),
@@ -35,7 +34,6 @@ HYPERPIXEL_VIRTUAL_BUTTONS = [
     ("DOWN",  (591, 216, 687, 312)),
     ("PLUS",  (696, 216, 792, 312)),
 
-    # --- Bottom keypad (2 rows x 5 cols, taller) ---
     ("0",     (487, 321, 544, 392)),
     ("1",     (549, 321, 606, 392)),
     ("2",     (611, 321, 668, 392)),
@@ -169,15 +167,14 @@ class DisplayHyperpixel4(DisplayBase):
         draw = ImageDraw.Draw(frame)
         font = ImageFont.load_default()
 
-        # divider line between UI + button panel
         draw.line((480, 0, 480, 479), fill=(80, 80, 80), width=2)
 
         def draw_button(rect, label):
-            x1, y1, x2, y2 = rect
             draw.rectangle(rect, outline=(220, 220, 220), width=2)
             bbox = draw.textbbox((0, 0), label, font=font)
             tw = bbox[2] - bbox[0]
             th = bbox[3] - bbox[1]
+            x1, y1, x2, y2 = rect
             tx = x1 + (x2 - x1 - tw) / 2
             ty = y1 + (y2 - y1 - th) / 2
             draw.text((tx, ty), label, fill=(255, 255, 255), font=font)
