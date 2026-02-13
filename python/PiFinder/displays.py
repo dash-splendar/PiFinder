@@ -48,6 +48,26 @@ HYPERPIXEL_VIRTUAL_BUTTONS = [
 ]
 
 
+def _load_button_font(size: int) -> ImageFont.ImageFont:
+    """
+    Prefer a real TTF so '2 sizes bigger' actually works.
+    Falls back to PIL's default bitmap font if not available.
+    """
+    candidates = [
+        "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/ttf/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/ttf/DejaVuSans.ttf",
+    ]
+    for p in candidates:
+        try:
+            return ImageFont.truetype(p, size=size)
+        except Exception:
+            pass
+    return ImageFont.load_default()
+
+
 ColorMask = namedtuple("ColorMask", ["mask", "mode"])
 RED_RGB: ColorMask = ColorMask(np.array([1, 0, 0]), "RGB")
 RED_BGR: ColorMask = ColorMask(np.array([0, 0, 1]), "BGR")
@@ -165,19 +185,30 @@ class DisplayHyperpixel4(DisplayBase):
         frame.paste(content, (0, 0))
 
         draw = ImageDraw.Draw(frame)
-        font = ImageFont.load_default()
 
-        draw.line((480, 0, 480, 479), fill=(80, 80, 80), width=2)
+        # --- Style tweaks requested ---
+        RED = (255, 0, 0)
+        border_color = RED
+        text_color = RED
+        divider_color = RED
+        border_width = 3  # slightly thicker to look crisp on 800x480
+
+        # "2 sizes bigger" than the old default font: use a real TTF at 18pt
+        font = _load_button_font(size=18)
+
+        # divider line between UI + button panel
+        draw.line((480, 0, 480, 479), fill=divider_color, width=2)
 
         def draw_button(rect, label):
-            draw.rectangle(rect, outline=(220, 220, 220), width=2)
+            x1, y1, x2, y2 = rect
+            draw.rectangle(rect, outline=border_color, width=border_width)
+
             bbox = draw.textbbox((0, 0), label, font=font)
             tw = bbox[2] - bbox[0]
             th = bbox[3] - bbox[1]
-            x1, y1, x2, y2 = rect
             tx = x1 + (x2 - x1 - tw) / 2
             ty = y1 + (y2 - y1 - th) / 2
-            draw.text((tx, ty), label, fill=(255, 255, 255), font=font)
+            draw.text((tx, ty), label, fill=text_color, font=font)
 
         for label, rect in HYPERPIXEL_VIRTUAL_BUTTONS:
             draw_button(rect, label)
