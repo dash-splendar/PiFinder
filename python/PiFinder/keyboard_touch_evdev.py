@@ -1,5 +1,7 @@
+import os
 import time
 from evdev import InputDevice, ecodes
+
 from PiFinder.keyboard_interface import KeyboardInterface
 from PiFinder.multiproclogging import MultiprocLogging
 
@@ -8,89 +10,122 @@ class KeyboardTouchEvdev(KeyboardInterface):
     """
     Touchscreen -> PiFinder keycodes, using evdev (no pygame/SDL).
 
-    Assumes screen coords are mapped to 800x480. If your device reports different
-    ABS ranges, we scale.
-    Right panel: x >= 480 is the button panel.
+    Assumes touch coordinates map to screen space 800x480 (we scale ABS ranges).
+    Button panel occupies the right side of the screen.
     """
 
     def __init__(self, q, dev_path: str, hold_time_s: float = 1.0):
         self.q = q
         self.dev = InputDevice(dev_path)
         self.hold_time_s = hold_time_s
-        self.alt_mode = False
 
-        # Determine abs ranges for scaling
-        ax = self.dev.absinfo(ecodes.ABS_X) if self.dev.capabilities().get(ecodes.EV_ABS) else None
-        ay = self.dev.absinfo(ecodes.ABS_Y) if self.dev.capabilities().get(ecodes.EV_ABS) else None
-        self.abs_x_min, self.abs_x_max = (ax.min, ax.max) if ax else (0, 799)
-        self.abs_y_min, self.abs_y_max = (ay.min, ay.max) if ay else (0, 479)
+        # Determine abs ranges for scaling (if device reports different ABS ranges)
+        ev_abs_caps = self.dev.capabilities().get(ecodes.EV_ABS, [])
+        ax = self.dev.absinfo(ecodes.ABS_X) if ecodes.ABS_X in ev_abs_caps else None
+        ay = self.dev.absinfo(ecodes.ABS_Y) if ecodes.ABS_Y in ev_abs_caps else None
 
-        self._build_layout()
+        # Prefer multitouch axes if present
+        ax_mt = (
+            self.dev.absinfo(ecodes.ABS_MT_POSITION_X)
+            if ecodes.ABS_MT_POSITION_X in ev_abs_caps
+            else None
+        )
+        ay_mt = (
+            self.dev.absinfo(ecodes.ABS_MT_POSITION_Y)
+            if ecodes.ABS_MT_POSITION_Y in ev_abs_caps
+            else None
+        )
 
-        # touch state
-        self._touch_down = False
+        use_ax = ax_mt or ax
+        use_ay = ay_mt or ay
+
+        self.abs_x_min, self.abs_x_max = (
+            (use_ax.min, use_ax.max) if use_ax else (0, 799)
+        )
+        self.abs_y_min, self.abs_y_max = (
+            (use_ay.min, use_ay.max) if use_ay else (0, 479)
+        )
+
+        # Touch state
         self._x = 0
         self._y = 0
+        self._touch_down = False
         self._down_t0 = 0.0
         self._down_key = None
         self._long_sent = False
+
+        # For MT protocol: tracking id >= 0 means down; -1 means up
+        self._mt_tracking_id = None
+
+        # Build button hitboxes + mapping
+        self._build_layout()
 
     def _scale_x(self, x_raw: int) -> int:
         # Map device abs range -> 0..799
         if self.abs_x_max == self.abs_x_min:
             return 0
-        return int((x_raw - self.abs_x_min) * 799 / (self.abs_x_max - self.abs_x_min))
+        x = int((x_raw - self.abs_x_min) * 799 / (self.abs_x_max - self.abs_x_min))
+        return max(0, min(799, x))
 
     def _scale_y(self, y_raw: int) -> int:
         # Map device abs range -> 0..479
         if self.abs_y_max == self.abs_y_min:
             return 0
-        return int((y_raw - self.abs_y_min) * 479 / (self.abs_y_max - self.abs_y_min))
+        y = int((y_raw - self.abs_y_min) * 479 / (self.abs_y_max - self.abs_y_min))
+        return max(0, min(479, y))
 
     def _build_layout(self):
-        # simple rect helper: (x1,y1,x2,y2) inclusive-ish
+        # Rect helper: (x1,y1,x2,y2)
         def R(x1, y1, x2, y2):
             return (x1, y1, x2, y2)
 
-        # Right panel: x 480..799, y 0..479
-        # Top ALT toggle
-        self.rect_alt = R(490, 10, 790, 60)
+        # Layout matches your picture, in absolute 800x480 coordinates.
+        # Right panel is x=480..799, y=0..479
 
-        # D-pad area
-        self.rect_up = R(600, 80, 690, 150)
-        self.rect_left = R(510, 160, 600, 230)
-        self.rect_square = R(600, 160, 690, 230)
-        self.rect_right = R(690, 160, 790, 230)
-        self.rect_down = R(600, 240, 690, 310)
+        # --- Top cluster (all same size) ---
+        rect_up = R(591, 6, 687, 102)
 
-        # +/- row
-        self.rect_minus = R(510, 330, 645, 395)
-        self.rect_plus = R(655, 330, 790, 395)
+        rect_left = R(486, 111, 582, 207)
+        rect_enter = R(591, 111, 687, 207)  # ENTER
+        rect_right = R(696, 111, 792, 207)
 
-        # Numpad
-        # 1 2 3
-        # 4 5 6
-        # 7 8 9
-        #   0
-        self.rect_1 = R(510, 405, 600, 470)
-        self.rect_2 = R(605, 405, 695, 470)
-        self.rect_3 = R(700, 405, 790, 470)
+        rect_minus = R(486, 216, 582, 312)
+        rect_down = R(591, 216, 687, 312)
+        rect_plus = R(696, 216, 792, 312)
 
-        # (You can change these later; for now we keep 1-3 only on bottom row to stay simple)
-        # If you want full 0-9 keypad, tell me and I’ll give you a nicer grid.
+        # --- Bottom keypad (2 rows x 5 cols) ---
+        rect_0 = R(487, 321, 544, 392)
+        rect_1 = R(549, 321, 606, 392)
+        rect_2 = R(611, 321, 668, 392)
+        rect_3 = R(673, 321, 730, 392)
+        rect_4 = R(735, 321, 792, 392)
 
+        rect_5 = R(487, 401, 544, 472)
+        rect_6 = R(549, 401, 606, 472)
+        rect_7 = R(611, 401, 668, 472)
+        rect_8 = R(673, 401, 730, 472)
+        rect_9 = R(735, 401, 792, 472)
+
+        # Map each rect to the PiFinder keycode it should emit.
+        # NOTE: PiFinder main loop treats SQUARE as the "enter/other options" key.
         self.hit_map = [
-            (self.rect_alt, "ALT_TOGGLE"),
-            (self.rect_up, self.UP),
-            (self.rect_down, self.DOWN),
-            (self.rect_left, self.LEFT),
-            (self.rect_right, self.RIGHT),
-            (self.rect_square, self.SQUARE),
-            (self.rect_plus, self.PLUS),
-            (self.rect_minus, self.MINUS),
-            (self.rect_1, 1),
-            (self.rect_2, 2),
-            (self.rect_3, 3),
+            (rect_up, self.UP),
+            (rect_down, self.DOWN),
+            (rect_left, self.LEFT),
+            (rect_right, self.RIGHT),
+            (rect_enter, self.SQUARE),  # ENTER -> SQUARE
+            (rect_plus, self.PLUS),
+            (rect_minus, self.MINUS),
+            (rect_0, 0),
+            (rect_1, 1),
+            (rect_2, 2),
+            (rect_3, 3),
+            (rect_4, 4),
+            (rect_5, 5),
+            (rect_6, 6),
+            (rect_7, 7),
+            (rect_8, 8),
+            (rect_9, 9),
         ]
 
     def _hit(self, x: int, y: int):
@@ -98,30 +133,6 @@ class KeyboardTouchEvdev(KeyboardInterface):
             if x1 <= x <= x2 and y1 <= y <= y2:
                 return key
         return None
-
-    def _apply_alt(self, keycode: int) -> int:
-        if not self.alt_mode:
-            return keycode
-        mapping = {
-            self.LEFT: self.ALT_LEFT,
-            self.RIGHT: self.ALT_RIGHT,
-            self.UP: self.ALT_UP,
-            self.DOWN: self.ALT_DOWN,
-            self.SQUARE: self.ALT_SQUARE,
-            self.PLUS: self.ALT_PLUS,
-            self.MINUS: self.ALT_MINUS,
-            0: self.ALT_0,
-            1: self.ALT_1,
-            2: self.ALT_2,
-            3: self.ALT_3,
-            4: self.ALT_4,
-            5: self.ALT_5,
-            6: self.ALT_6,
-            7: self.ALT_7,
-            8: self.ALT_8,
-            9: self.ALT_9,
-        }
-        return mapping.get(keycode, keycode)
 
     def _apply_long(self, keycode: int) -> int:
         mapping = {
@@ -148,37 +159,54 @@ class KeyboardTouchEvdev(KeyboardInterface):
     def _emit(self, code: int):
         self.q.put(int(code))
 
+    def _touch_down_event(self):
+        self._touch_down = True
+        self._down_t0 = time.monotonic()
+        self._long_sent = False
+        self._down_key = self._hit(self._x, self._y)
+
+    def _touch_up_event(self):
+        if self._touch_down and self._down_key is not None and not self._long_sent:
+            self._emit(self._down_key)
+        self._touch_down = False
+        self._down_key = None
+        self._long_sent = False
+
     def run(self, log_queue):
         MultiprocLogging.configurer(log_queue)
 
-        # Some touch devices use BTN_TOUCH, others use ABS_MT_* + SYN_REPORT
-        have_btn_touch = ecodes.BTN_TOUCH in self.dev.capabilities().get(ecodes.EV_KEY, [])
+        ev_key_caps = self.dev.capabilities().get(ecodes.EV_KEY, [])
+        have_btn_touch = ecodes.BTN_TOUCH in ev_key_caps
+
+        ev_abs_caps = self.dev.capabilities().get(ecodes.EV_ABS, [])
+        have_mt_tracking = ecodes.ABS_MT_TRACKING_ID in ev_abs_caps
 
         for ev in self.dev.read_loop():
+            # Update position from either single-touch or multi-touch axes
             if ev.type == ecodes.EV_ABS:
                 if ev.code in (ecodes.ABS_X, ecodes.ABS_MT_POSITION_X):
                     self._x = self._scale_x(ev.value)
                 elif ev.code in (ecodes.ABS_Y, ecodes.ABS_MT_POSITION_Y):
                     self._y = self._scale_y(ev.value)
 
-            elif ev.type == ecodes.EV_KEY and have_btn_touch and ev.code == ecodes.BTN_TOUCH:
-                if ev.value == 1:  # down
-                    self._touch_down = True
-                    self._down_t0 = time.monotonic()
-                    self._long_sent = False
-                    hit = self._hit(self._x, self._y)
-                    self._down_key = hit
-                    if hit == "ALT_TOGGLE":
-                        self.alt_mode = not self.alt_mode
-                        self._down_key = None  # consume
-                else:  # up
-                    if self._touch_down and self._down_key is not None and not self._long_sent:
-                        self._emit(self._apply_alt(self._down_key))
-                    self._touch_down = False
-                    self._down_key = None
-                    self._long_sent = False
+                # Multi-touch touch down/up detection
+                if have_mt_tracking and ev.code == ecodes.ABS_MT_TRACKING_ID:
+                    # >=0 means finger down, -1 means up
+                    if ev.value >= 0 and not self._touch_down:
+                        self._mt_tracking_id = ev.value
+                        self._touch_down_event()
+                    elif ev.value == -1 and self._touch_down:
+                        self._mt_tracking_id = None
+                        self._touch_up_event()
 
-            # Long press check (cheap polling using time)
+            # BTN_TOUCH touch down/up detection (some devices)
+            elif ev.type == ecodes.EV_KEY and have_btn_touch and ev.code == ecodes.BTN_TOUCH:
+                if ev.value == 1 and not self._touch_down:
+                    self._touch_down_event()
+                elif ev.value == 0 and self._touch_down:
+                    self._touch_up_event()
+
+            # Long press check
             if self._touch_down and (self._down_key is not None) and (not self._long_sent):
                 if time.monotonic() - self._down_t0 >= self.hold_time_s:
                     self._long_sent = True
@@ -186,7 +214,8 @@ class KeyboardTouchEvdev(KeyboardInterface):
 
 
 def run_keyboard(q, shared_state, log_queue, bloom_remap=False):
-    # Set your touch device path here or via env var
-    import os
-    dev_path = os.environ.get("PIFINDER_TOUCH_DEV", "/dev/input/by-path/platform-i2c@0-event")
+    # Use env var override, otherwise default to HyperPixel's i2c touchscreen path
+    dev_path = os.environ.get(
+        "PIFINDER_TOUCH_DEV", "/dev/input/by-path/platform-i2c@0-event"
+    )
     KeyboardTouchEvdev(q, dev_path=dev_path).run(log_queue)
