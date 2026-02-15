@@ -42,6 +42,8 @@ EOF
 sudo chown pifinder:pifinder $XINITRC
 sudo chmod 755 $XINITRC
 
+deactivate
+
 
 # -----------------------------
 # Create & use Python venv
