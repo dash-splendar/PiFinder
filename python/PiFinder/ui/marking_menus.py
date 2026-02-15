@@ -70,9 +70,16 @@ def render_marking_menu(
         fill=(0, 0, 0, 128),
     )
 
-    # we need some padding here
-    outer_radius = radius + display_class.fonts.large.height - 1
-    inner_radius = radius - 3
+    # Scale legacy pixel deltas (tuned for 128x128) to current square UI resolution
+    ui_res = min(display_class.resolution)
+    ui_scale = ui_res / 128.0
+
+    def _s(px: int, *, min_px: int = 0) -> int:
+        return max(min_px, int(round(px * ui_scale)))
+
+    # we need some padding here (legacy deltas: -1, -3)
+    outer_radius = radius + display_class.fonts.large.height - _s(1, min_px=1)
+    inner_radius = radius - _s(3, min_px=1)
 
     display_center = (
         display_class.resolution[0] / 2,
@@ -119,7 +126,7 @@ def render_marking_menu(
             end_angle,
             fill_color,
             display_class.colors.get(128),
-            1,
+            max(1, _s(1, min_px=1)),
         )
 
         menu_text = render_menu_item(
@@ -154,12 +161,13 @@ def render_marking_menu(
             offset_center[1]
             - inner_radius
             - int(display_class.fonts.huge.height / 2)
-            + 2,
+            + _s(2, min_px=1),
         ),
         _UP_ARROW,
         font=display_class.fonts.huge.font,
         fill=display_class.colors.get(128),
     )
+
     offset_menu_image = ImageChops.add(offset_menu_image, arrow_image)
     base_arrow_image = arrow_image.copy()
     offset_menu_image = ImageChops.add(

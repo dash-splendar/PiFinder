@@ -92,33 +92,45 @@ class UIPreview(UIModule):
 
             for _i in range(self.highlight_count):
                 raw_y, raw_x = self.star_list[_i]
-                star_x = int(raw_x / 4)
-                star_y = int(raw_y / 4)
 
+                # Centroiding coordinates are in a larger "solver" space (legacy was 512 -> 128 via /4).
+                # Map solver space -> current UI square size.
+                ui = self.display_class.resX
+                solver_space = 512.0
+                scale = ui / solver_space
+
+                star_x = int(raw_x * scale)
+                star_y = int(raw_y * scale)
+
+                # Scaled geometry (legacy-tuned for 128px)
                 x_direction = 1
-                x_text_offset = 6
+                x_text_offset = self._s(6, min_px=2)
                 y_direction = 1
-                y_text_offset = -12
+                y_text_offset = -self._s(12, min_px=4)
 
-                if star_x > 108:
+                # Thresholds as fractions of width/height (legacy 108/128 and 38/128)
+                if star_x > int(0.84375 * ui):
                     x_direction = -1
-                    x_text_offset = -10
-                if star_y < 38:
+                    x_text_offset = -self._s(10, min_px=3)
+                if star_y < int(0.296875 * ui):
                     y_direction = -1
-                    y_text_offset = 1
+                    y_text_offset = self._s(1, min_px=1)
+
+                inner = self._s(4, min_px=2)
+                outer = self._s(12, min_px=4)
 
                 self.draw.line(
                     [
-                        (star_x, star_y - (4 * y_direction)),
-                        (star_x, star_y - (12 * y_direction)),
+                        (star_x, star_y - (inner * y_direction)),
+                        (star_x, star_y - (outer * y_direction)),
                     ],
                     fill=self.colors.get(128),
                 )
 
                 self.draw.line(
                     [
-                        (star_x + (4 * x_direction), star_y),
-                        (star_x + (12 * x_direction), star_y),
+                        (star_x + (inner * x_direction), star_y),
+                        (star_x + (outer * x_direction), star_y),
                     ],
                     fill=self.colors.get(128),
                 )
@@ -172,34 +184,36 @@ class UIPreview(UIModule):
         except Exception:
             pass
 
-        # Position below title bar (titlebar_height is typically 17)
-        y_offset = self.display_class.titlebar_height + 2
+            # Position below title bar
+            y_offset = self.display_class.titlebar_height + self._s(2, min_px=1)
 
-        # Draw exposure text with black outline using utility function
-        outline_text(
-            self.draw,
-            (2, y_offset),
-            exposure_text,
-            align="left",
-            font=self.fonts.bold,
-            fill=(192, 0, 0),  # Medium bright red
-            shadow_color=(0, 0, 0),  # Black outline
-            stroke=1,
-        )
+            x_pad = self._s(2, min_px=1)
+            x_right = self.display_class.resX - x_pad
+
+            outline_text(
+                self.draw,
+                (x_pad, y_offset),
+                exposure_text,
+                align="left",
+                font=self.fonts.bold,
+                fill=(192, 0, 0),  # Medium bright red
+                shadow_color=(0, 0, 0),  # Black outline
+                stroke=1,
+            )
 
         # Draw star count with NerdFont icon - right-aligned to prevent jitter
         stars_text = f"{self._STAR_ICON} {star_count_text}"
 
         outline_text(
             self.draw,
-            (126, y_offset),
+            (x_right, y_offset),
             stars_text,
             align="left",
             font=self.fonts.bold,
             fill=(192, 0, 0),  # Medium bright red
             shadow_color=(0, 0, 0),  # Black outline
             stroke=1,
-            anchor="ra",  # Right-anchor: right edge at x=126
+            anchor="ra",  # Right-anchor: right edge at x_right
         )
 
     def update(self, force=False):
@@ -212,15 +226,24 @@ class UIPreview(UIModule):
             image_updated = True
             image_obj = self.camera_image.copy()
 
-            # Resize
+            # Resize / zoom (output always matches the current square UI resolution)
+            out = self.display_class.resX
+
             if self.zoom_level == 0:
-                image_obj = image_obj.resize((128, 128))
+                # Fit full frame into UI
+                image_obj = image_obj.resize((out, out))
             elif self.zoom_level == 1:
-                image_obj = image_obj.resize((256, 256))
-                image_obj = image_obj.crop((64, 64, 192, 192))
+                # Zoom x2: scale up then center-crop back to UI size
+                big = out * 2
+                image_obj = image_obj.resize((big, big))
+                off = (big - out) // 2
+                image_obj = image_obj.crop((off, off, off + out, off + out))
             elif self.zoom_level == 2:
-                # no resize, just crop
-                image_obj = image_obj.crop((192, 192, 320, 320))
+                # Zoom x4: scale up then center-crop back to UI size
+                big = out * 4
+                image_obj = image_obj.resize((big, big))
+                off = (big - out) // 2
+                image_obj = image_obj.crop((off, off, off + out, off + out))
 
             # Convert to RED
             image_obj = image_obj.convert("RGB")
@@ -232,12 +255,19 @@ class UIPreview(UIModule):
 
             if self.zoom_level > 0:
                 zoom_number = self.zoom_level * 2
+                zoom_text = _("Zoom x{zoom_number}").format(zoom_number=zoom_number)
+                pad = self._s(4, min_px=2)
+                text_w = self.fonts.bold.getsize(zoom_text)[0]
+                x = self.display_class.resX - text_w - pad
+                y = self.display_class.resY - self.fonts.bold.height - pad
+
                 self.draw.text(
-                    (75, 112),
-                    _("Zoom x{zoom_number}").format(zoom_number=zoom_number),
+                    (x, y),
+                    zoom_text,
                     font=self.fonts.bold.font,
                     fill=self.colors.get(128),
                 )
+
             else:
                 self.draw_reticle()
 

@@ -118,6 +118,16 @@ class MenuManager:
         self.shared_state = shared_state
         self.ui_state = shared_state.ui_state()
         self.camera_image = camera_image
+
+        # Scale helper for legacy 128x128-tuned UI constants used inside MenuManager
+        ui_res = min(self.display_class.resolution)
+        self.ui_scale = getattr(self.display_class, "ui_scale", ui_res / 128.0)
+
+        def _s(px: int, *, min_px: int = 0) -> int:
+            return max(min_px, int(round(px * self.ui_scale)))
+
+        self._s = _s
+
         self.command_queues = command_queues
         self.config_object = config_object
         self.catalogs = catalogs
@@ -260,8 +270,9 @@ class MenuManager:
                 self.marking_menu_bg.copy(),
                 self.marking_menu_stack[-1],
                 self.display_class,
-                39,
+                self._s(39, min_px=12),
             )
+
             self.update_screen(marking_menu_image)
 
     def flash_marking_menu_option(self, option: MarkingMenuOption) -> None:
@@ -270,9 +281,10 @@ class MenuManager:
             self.marking_menu_bg.copy(),
             self.marking_menu_stack[-1],
             self.display_class,
-            39,
+            self._s(39, min_px=12),
             option,
         )
+
         self.update_screen(marking_menu_image)
         time.sleep(0.15)
 

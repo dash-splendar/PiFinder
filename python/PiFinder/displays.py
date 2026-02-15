@@ -112,17 +112,40 @@ class PygameWindowDevice:
 
 
 class DisplayBase:
+    # "UI resolution" used by the PiFinder UI renderer.
+    # For native-square rendering, this should be (N, N).
     resolution = (128, 128)
+
     color_mask = RED_RGB
-    titlebar_height = 17
-    base_font_size = 10
-    bold_font_size = 12
-    small_font_size = 8
-    large_font_size = 15
-    huge_font_size = 35
     device = luma.core.device.device
 
+    # Base metrics are defined for 128x128 and scaled to the current UI resolution.
+    _BASE_UI = 128
+    _BASE_TITLEBAR_H = 17
+    _BASE_FONT = 10
+    _BOLD_FONT = 12
+    _SMALL_FONT = 8
+    _LARGE_FONT = 15
+    _HUGE_FONT = 35
+
     def __init__(self):
+        self.resX, self.resY = self.resolution
+
+        # Scale UI metrics relative to the smaller side (keeps things sane if non-square).
+        ui_ref = min(self.resX, self.resY)
+        self.ui_scale = ui_ref / float(self._BASE_UI)
+
+        def _s(px: int, *, min_px: int = 1) -> int:
+            return max(min_px, int(round(px * self.ui_scale)))
+
+        # These become the canonical, resolution-aware metrics used elsewhere in UI code.
+        self.titlebar_height = _s(self._BASE_TITLEBAR_H, min_px=10)
+        self.base_font_size  = _s(self._BASE_FONT, min_px=8)
+        self.bold_font_size  = _s(self._BOLD_FONT, min_px=8)
+        self.small_font_size = _s(self._SMALL_FONT, min_px=6)
+        self.large_font_size = _s(self._LARGE_FONT, min_px=10)
+        self.huge_font_size  = _s(self._HUGE_FONT, min_px=18)
+
         self.colors = Colors(self.color_mask, self.resolution)
         self.fonts = Fonts(
             self.base_font_size,
@@ -130,13 +153,13 @@ class DisplayBase:
             self.small_font_size,
             self.large_font_size,
             self.huge_font_size,
-            self.resolution[0],
+            self.resX,
         )
 
-        self.centerX = self.resolution[0] // 2
-        self.centerY = self.resolution[1] // 2
+        self.centerX = self.resX // 2
+        self.centerY = self.resY // 2
         self.fov_res = min(self.resolution)
-        self.resX, self.resY = self.resolution
+
 
     def set_brightness(self, brightness: int) -> None:
         return None
@@ -144,60 +167,67 @@ class DisplayBase:
 
 class DisplayHyperpixel4(DisplayBase):
     """
-    Compatibility mode:
-      - PiFinder UI renders at 128x128
-      - scaled to 480x480 on the left
-      - right 320px is reserved for virtual buttons
+    HyperPixel4 output:
+      - Output framebuffer is out_w x out_h (default 800x480)
+      - UI is rendered into a square ui_size x ui_size on the left (default ui_size=out_h=480)
+      - Right side is reserved for virtual buttons (drawn here, but touch handling lives elsewhere)
     """
 
-    def __init__(self, native=False, fullscreen=True):
-        if native:
-            self.resolution = (HYPERPIXEL_OUT_W, HYPERPIXEL_OUT_H)
-            self.titlebar_height = 40
-            self.base_font_size = 24
+    def __init__(self, native: bool = False, fullscreen: bool = True,
+                 out_w: int = 800, out_h: int = 480, ui_size: int | None = None):
+        self._native = native
+        self._out_w, self._out_h = out_w, out_h
+        self._ui_size = int(ui_size) if ui_size is not None else int(out_h)  # 800x480 -> 480
+
+        # The UI renderer should see a SQUARE canvas.
+        if self._native:
+            self.resolution = (self._ui_size, self._ui_size)   # <- key fix
         else:
             self.resolution = (128, 128)
-            self.titlebar_height = 16
-            self.base_font_size = 12
 
         super().__init__()
 
-        self._native = native
-        self._out_w, self._out_h = (HYPERPIXEL_OUT_W, HYPERPIXEL_OUT_H)
         self.device = PygameWindowDevice(self._out_w, self._out_h, fullscreen)
-
-        if not self._native:
-            self._bg = Image.new("RGB", (self._out_w, self._out_h), (0, 0, 0))
+        self._bg = Image.new("RGB", (self._out_w, self._out_h), (0, 0, 0))
 
         self._orig_device_display = self.device.display
 
-        def wrapped_display(pil_img):
-            if self._native:
-                self._orig_device_display(pil_img)
-            else:
-                self._orig_device_display(self._compose_compat_frame(pil_img))
+        def wrapped_display(pil_img: Image.Image):
+            # Always composite into the real output framebuffer (to add right-side buttons).
+            self._orig_device_display(self._compose_frame(pil_img))
 
         self.device.display = wrapped_display
 
-    def _compose_compat_frame(self, ui_img: Image.Image) -> Image.Image:
-        content = ui_img.convert("RGB").resize((480, 480), Image.NEAREST)
+    def _compose_frame(self, ui_img: Image.Image) -> Image.Image:
+        # Left square box
+        if self._native:
+            content = ui_img.convert("RGB")
+            # If some UI path produced the wrong size, enforce it safely.
+            if content.size != (self._ui_size, self._ui_size):
+                content = content.resize((self._ui_size, self._ui_size), Image.NEAREST)
+        else:
+            # Compatibility: 128x128 UI -> scale up to ui_size x ui_size
+            content = ui_img.convert("RGB").resize((self._ui_size, self._ui_size), Image.NEAREST)
+
         frame = self._bg.copy()
         frame.paste(content, (0, 0))
 
         draw = ImageDraw.Draw(frame)
 
-        # --- Style tweaks requested ---
         RED = (255, 0, 0)
         border_color = RED
         text_color = RED
         divider_color = RED
-        border_width = 3  # slightly thicker to look crisp on 800x480
 
-        # "2 sizes bigger" than the old default font: use a real TTF at 18pt
-        font = _load_button_font(size=18)
+        # Scale button styling based on output height (keeps it consistent if out_h changes)
+        scale = self._out_h / 480.0
+        border_width = max(2, int(round(3 * scale)))
+        divider_w = max(2, int(round(2 * scale)))
+        font = _load_button_font(size=max(12, int(round(18 * scale))))
 
         # divider line between UI + button panel
-        draw.line((480, 0, 480, 479), fill=divider_color, width=2)
+        x_div = self._ui_size
+        draw.line((x_div, 0, x_div, self._out_h - 1), fill=divider_color, width=divider_w)
 
         def draw_button(rect, label):
             x1, y1, x2, y2 = rect
@@ -210,10 +240,13 @@ class DisplayHyperpixel4(DisplayBase):
             ty = y1 + (y2 - y1 - th) / 2
             draw.text((tx, ty), label, fill=text_color, font=font)
 
+        # NOTE: These rects are still in 800x480 coordinates.
+        # If you want true arbitrary out_w/out_h later, we’ll generate these rects from a grid.
         for label, rect in HYPERPIXEL_VIRTUAL_BUTTONS:
             draw_button(rect, label)
 
         return frame
+
 
 
 class DisplayPygame_128(DisplayBase):
@@ -266,6 +299,8 @@ def get_display(display_hardware: str) -> DisplayBase:
         return DisplayST7789()
     if display_hardware == "hyperpixel4":
         return DisplayHyperpixel4(native=False, fullscreen=True)
+    if display_hardware == "hyperpixel4_native":
+        return DisplayHyperpixel4(native=True, fullscreen=True)
 
     print("Hardware platform not recognized")
     return DisplaySSD1351()

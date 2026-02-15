@@ -25,12 +25,17 @@ class Font:
         )
 
         # calculate height/width
-        # Use several chars to get space between
+        # getbbox returns (x0, y0, x1, y1) so height/width must be (x1-x0)/(y1-y0)
+        # Use several chars to average out glyph spacing.
         bbox = self.font.getbbox("MMMMMMMMMM")
-        self.height = bbox[3] if height == 0 else height
-        self.width = int(bbox[2] / 10) if width == 0 else width
+        calc_h = (bbox[3] - bbox[1])
+        calc_w = int(round((bbox[2] - bbox[0]) / 10.0))
 
-        self.line_length = int(screen_width / self.width)
+        self.height = calc_h if height == 0 else height
+        self.width = calc_w if width == 0 else width
+
+        # Defensive clamp: avoid 0 if width > screen_width
+        self.line_length = max(1, int(screen_width / max(1, self.width)))
 
 
 class Fonts:
@@ -43,9 +48,10 @@ class Fonts:
         huge_size=35,
         screen_width=128,
     ):
-        font_path = str(Path(Path.cwd(), "../fonts"))
-        boldttf = str(Path(font_path, "RobotoMonoNerdFontMono-Bold.ttf"))
-        regularttf = str(Path(font_path, "RobotoMonoNerdFontMono-Regular.ttf"))
+        # Resolve fonts directory relative to this file, not current working directory
+        font_path = Path(__file__).resolve().parent.parent / "fonts"
+        boldttf = str(font_path / "RobotoMonoNerdFontMono-Bold.ttf")
+        regularttf = str(font_path / "RobotoMonoNerdFontMono-Regular.ttf")
 
         self.base = Font(boldttf, base_size, screen_width)  # 10
         self.bold = Font(boldttf, bold_size, screen_width)  # 12

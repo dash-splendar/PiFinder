@@ -129,6 +129,16 @@ class UIModule:
         self.draw = ImageDraw.Draw(self.screen, mode="RGBA")
         self.fonts = self.display_class.fonts
 
+        # Scale factor relative to original 128x128 UI.
+        # Prefer display-provided scale if present, otherwise compute from current square UI size.
+        self.ui_scale = getattr(self.display_class, "ui_scale",
+                                min(self.display_class.resX, self.display_class.resY) / 128.0)
+
+        def _s(px: int, *, min_px: int = 0) -> int:
+            return max(min_px, int(round(px * self.ui_scale)))
+
+        self._s = _s
+
         # UI Module definition
         self.item_definition = item_definition
         self.title = item_definition.get("name", self.title)
@@ -213,15 +223,30 @@ class UIModule:
             fill=self.colors.get(0),
         )
 
-    def message(self, message, timeout: float = 2, size=(5, 44, 123, 84)):
+    def message(self, message, timeout: float = 2, size=None):
         """
         Creates a box with text in the center of the screen.
         Waits timeout in seconds
         """
 
         # shadow
+        if size is None:
+            # Legacy popup was roughly: left/right margin ~5px, top ~44px, bottom ~84px on 128.
+            # Convert that to a centered popup sized proportionally for any square UI resolution.
+            margin_x = self._s(5, min_px=4)
+            box_w = self.display_class.resX - (margin_x * 2)
+            box_h = self._s(40, min_px=self._s(28, min_px=24))  # ~40px on 128, scaled
+            x1 = margin_x
+            x2 = x1 + box_w
+            y1 = (self.display_class.resY - box_h) // 2
+            y2 = y1 + box_h
+            size = (x1, y1, x2, y2)
+
+        shadow = self._s(5, min_px=2)
+
+        # shadow
         self.draw.rectangle(
-            (size[0] + 5, size[1] + 5, size[2] + 5, size[3] + 5),
+            (size[0] + shadow, size[1] + shadow, size[2] + shadow, size[3] + shadow),
             fill=self.colors.get(0),
             outline=self.colors.get(0),
         )
@@ -231,11 +256,12 @@ class UIModule:
         message = " " * int((line_length - len(message)) / 2) + message
 
         self.draw.text(
-            (size[0] + 4, size[1] + 5),
+            (size[0] + self._s(4, min_px=2), size[1] + self._s(5, min_px=2)),
             message,
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
+
         screen_to_display = self.screen.convert(self.display.mode)
         self.display.display(screen_to_display)
 
@@ -251,8 +277,13 @@ class UIModule:
             self.draw, x, y, self.fonts.bold.font, self.colors, max_brightness=64, inverted=True
         )
 
-    def draw_rotating_info(self, x=10, y=92, font=None):
+    def draw_rotating_info(self, x=None, y=None, font=None):
         """Draw rotating constellation/SQM display with cross-fade."""
+        if x is None:
+            x = self._s(10, min_px=0)
+        if y is None:
+            y = self._s(92, min_px=0)
+
         self._rotating_display.draw(
             self.draw, x, y, font or self.fonts.bold.font, self.colors, max_brightness=255
         )
@@ -275,14 +306,18 @@ class UIModule:
                 [0, 0, self.display_class.resX, self.display_class.titlebar_height],
                 fill=bg,
             )
+            x_pad = self._s(6, min_px=2)
+            y_text = max(0, (self.display_class.titlebar_height - self.fonts.bold.height) // 2)
+
             if self.ui_state.show_fps():
                 self.draw.text(
-                    (6, 1), str(self.fps), font=self.fonts.bold.font, fill=fg
+                    (x_pad, y_text), str(self.fps), font=self.fonts.bold.font, fill=fg
                 )
             else:
                 self.draw.text(
-                    (6, 1), _(self.title), font=self.fonts.bold.font, fill=fg
+                    (x_pad, y_text), _(self.title), font=self.fonts.bold.font, fill=fg
                 )
+
             imu = self.shared_state.imu()
             moving = True if imu and imu["pos"] and imu["moving"] else False
 
@@ -298,8 +333,10 @@ class UIModule:
             _gps_color = self.colors.get(
                 self._gps_brightness if self._gps_brightness > 0 else 0
             )
+            y_icon = max(0, (self.display_class.titlebar_height - self.fonts.icon_bold_large.height) // 2)
+
             self.draw.text(
-                (self.display_class.resX * 0.8, -2),
+                (int(self.display_class.resX * 0.80), y_icon),
                 self._GPS_ICON,
                 font=self.fonts.icon_bold_large.font,
                 fill=_gps_color,
@@ -320,8 +357,10 @@ class UIModule:
                     # self.draw.rectangle([115, 2, 125, 14], fill=bg)
 
                     if self._unmoved:
+                        y_icon = max(0, (self.display_class.titlebar_height - self.fonts.icon_bold_large.height) // 2)
+
                         self.draw.text(
-                            (self.display_class.resX * 0.91, -2),
+                            (int(self.display_class.resX * 0.91), y_icon),
                             self._CAM_ICON,
                             font=self.fonts.icon_bold_large.font,
                             fill=var_fg,
@@ -329,15 +368,18 @@ class UIModule:
 
                     if len(self.title) < 9:
                         # Draw rotating constellation/SQM wheel (replaces static constellation)
+                        y_text = max(0, (self.display_class.titlebar_height - self.fonts.bold.height) // 2)
                         self._draw_titlebar_rotating_info(
                             x=int(self.display_class.resX * 0.54),
-                            y=1,
+                            y=y_text,
                             fg=fg if self._unmoved else self.colors.get(32),
                         )
+
                 else:
                     # no solve yet....
+                    y_text = max(0, (self.display_class.titlebar_height - self.fonts.bold.height) // 2)
                     self.draw.text(
-                        (self.display_class.resX * 0.91, 0),
+                        (int(self.display_class.resX * 0.91), y_text),
                         "X",
                         font=self.fonts.bold.font,
                         fill=fg,

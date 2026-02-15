@@ -69,161 +69,186 @@ class UIExpSweep(UIModule):
         return self.screen_update(title_bar=True)
 
     def _draw_ask_sqm(self):
-        """Draw SQM input screen"""
+        """Draw SQM input screen (resolution-aware)"""
+        x = self._s(10, min_px=4)
+        gap = self._s(4, min_px=2)
+
+        y = self.display_class.titlebar_height + self._s(6, min_px=2)
+
+        # Heading
         self.draw.text(
-            (10, 15),
+            (x, y),
             "REFERENCE SQM",
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
+        y += self.fonts.bold.height + self._s(8, min_px=3)
 
+        # Prompt
         self.draw.text(
-            (10, 35),
+            (x, y),
             "Enter SQM from",
             font=self.fonts.base.font,
             fill=self.colors.get(192),
         )
+        y += self.fonts.base.height + gap
+
         self.draw.text(
-            (10, 47),
+            (x, y),
             "external meter:",
             font=self.fonts.base.font,
             fill=self.colors.get(192),
         )
+        y += self.fonts.base.height + self._s(10, min_px=4)
 
         # Show current input with decimal separator (XX.XX format)
         if self.sqm_input:
             if len(self.sqm_input) <= 2:
-                # Show what we have so far
                 display = self.sqm_input + "_" * (2 - len(self.sqm_input)) + "." + "__"
             else:
-                # Insert decimal point after 2 digits
                 display = (
-                    self.sqm_input[:2]
-                    + "."
-                    + self.sqm_input[2:]
-                    + "_" * (4 - len(self.sqm_input))
+                        self.sqm_input[:2]
+                        + "."
+                        + self.sqm_input[2:]
+                        + "_" * (4 - len(self.sqm_input))
                 )
         else:
             display = "__.__"
 
         self.draw.text(
-            (10, 65),
+            (x, y),
             f"SQM: {display}",
             font=self.fonts.large.font,
             fill=self.colors.get(255),
         )
 
-        # Legend
+        # Legend pinned to bottom
+        leg_gap = self._s(2, min_px=1)
+        y2 = self.display_class.resY - self.fonts.base.height - self._s(4, min_px=2)
+        y1 = y2 - self.fonts.base.height - leg_gap
+
         self.draw.text(
-            (10, 95),
+            (x, y1),
             "0-9: Enter  -: Del",
             font=self.fonts.base.font,
             fill=self.colors.get(128),
         )
         self.draw.text(
-            (10, 107),
+            (x, y2),
             f"{self._SQUARE_}: OK  0: Skip",
             font=self.fonts.base.font,
             fill=self.colors.get(192),
         )
 
     def _draw_confirm(self):
-        """Draw confirmation screen"""
+        """Draw confirmation screen (resolution-aware)"""
+        x = self._s(10, min_px=4)
+        gap = self._s(4, min_px=2)
+
+        y = self.display_class.titlebar_height + self._s(8, min_px=3)
+
         self.draw.text(
-            (10, 20),
+            (x, y),
             "READY?",
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
+        y += self.fonts.bold.height + self._s(10, min_px=4)
 
         if self.reference_sqm:
             self.draw.text(
-                (10, 45),
+                (x, y),
                 f"Ref SQM: {self.reference_sqm:.2f}",
                 font=self.fonts.base.font,
                 fill=self.colors.get(192),
             )
         else:
             self.draw.text(
-                (10, 45),
+                (x, y),
                 "No reference SQM",
                 font=self.fonts.base.font,
                 fill=self.colors.get(128),
             )
 
+        y += self.fonts.base.height + self._s(8, min_px=3)
+
         self.draw.text(
-            (10, 65),
-            "20 images",
+            (x, y),
+            f"{self.total_images} images",
             font=self.fonts.base.font,
             fill=self.colors.get(192),
         )
+        y += self.fonts.base.height + gap
+
         self.draw.text(
-            (10, 77),
+            (x, y),
             "~1 minute",
             font=self.fonts.base.font,
             fill=self.colors.get(192),
         )
 
-        # Legend
+        # Legend pinned to bottom
+        y_leg = self.display_class.resY - self.fonts.base.height - self._s(4, min_px=2)
         self.draw.text(
-            (10, 110),
+            (x, y_leg),
             f"{self._SQUARE_}: START  0: CANCEL",
             font=self.fonts.base.font,
             fill=self.colors.get(192),
         )
 
     def _draw_capturing(self):
-        """Draw capture progress"""
+        """Draw capture progress (resolution-aware)"""
         if not self.sweep_started:
-            # Start sweep
             self.sweep_started = True
             self.start_time = time.time()
-            # Send command with reference SQM
-            cmd = (
-                f"capture_exp_sweep:{self.reference_sqm if self.reference_sqm else 0.0}"
-            )
+            cmd = f"capture_exp_sweep:{self.reference_sqm if self.reference_sqm else 0.0}"
             self.command_queues["camera"].put(cmd)
-            # Wait a moment for sweep directory to be created
             time.sleep(0.2)
 
+        x = self._s(10, min_px=4)
+        gap = self._s(4, min_px=2)
+
+        y = self.display_class.titlebar_height + self._s(6, min_px=2)
+
         self.draw.text(
-            (10, 15),
+            (x, y),
             "CAPTURING...",
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
+        y += self.fonts.bold.height + self._s(10, min_px=4)
 
-        # Count files in sweep directory that was created after we started
         file_count = self._get_sweep_files_since_start()
         progress_pct = min(100, int((file_count / self.total_images) * 100))
 
-        # Show actual file count
         self.draw.text(
-            (10, 40),
+            (x, y),
             f"{file_count} / {self.total_images}",
             font=self.fonts.large.font,
             fill=self.colors.get(192),
         )
+        y += self.fonts.large.height + self._s(10, min_px=4)
 
-        # Progress bar
-        bar_x = 10
-        bar_y = 65
-        bar_width = 108
-        bar_height = 12
+        # Progress bar: full width with margins
+        bar_x = x
+        bar_w = max(10, self.display_class.resX - (2 * x))
+        bar_h = self._s(12, min_px=6)
 
         self.draw.rectangle(
-            [bar_x, bar_y, bar_x + bar_width, bar_y + bar_height],
+            [bar_x, y, bar_x + bar_w, y + bar_h],
             outline=self.colors.get(128),
             fill=self.colors.get(0),
         )
 
-        filled_width = int(bar_width * (progress_pct / 100))
+        filled_w = int(bar_w * (progress_pct / 100.0))
         self.draw.rectangle(
-            [bar_x, bar_y, bar_x + filled_width, bar_y + bar_height],
+            [bar_x, y, bar_x + filled_w, y + bar_h],
             fill=self.colors.get(128),
         )
 
-        # Estimated time remaining based on actual progress
+        y += bar_h + self._s(8, min_px=3)
+
+        # Estimated time remaining
         elapsed = int(time.time() - self.start_time)
         if file_count > 0:
             avg_time_per_image = elapsed / file_count
@@ -234,13 +259,12 @@ class UIExpSweep(UIModule):
         mins = remaining // 60
         secs = remaining % 60
         self.draw.text(
-            (10, 85),
+            (x, y),
             f"~{mins}:{secs:02d} remaining",
             font=self.fonts.base.font,
             fill=self.colors.get(128),
         )
 
-        # Auto-complete when all files captured
         if file_count >= self.total_images:
             self.state = SweepState.COMPLETE
 
@@ -272,23 +296,33 @@ class UIExpSweep(UIModule):
             return 0
 
     def _draw_complete(self):
-        """Draw completion screen"""
+        """Draw completion screen (resolution-aware)"""
+        x = self._s(10, min_px=4)
+
+        # Place message around upper-middle of the usable area
+        usable_h = self.display_class.resY - self.display_class.titlebar_height
+        y = self.display_class.titlebar_height + int(usable_h * 0.30)
+
         self.draw.text(
-            (10, 40),
+            (x, y),
             "SWEEP COMPLETE!",
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
 
+        y += self.fonts.bold.height + self._s(10, min_px=4)
+
         self.draw.text(
-            (10, 70),
+            (x, y),
             "Metadata saved",
             font=self.fonts.base.font,
             fill=self.colors.get(192),
         )
 
+        # Legend pinned to bottom
+        y_leg = self.display_class.resY - self.fonts.base.height - self._s(4, min_px=2)
         self.draw.text(
-            (10, 110),
+            (x, y_leg),
             f"{self._SQUARE_}: EXIT",
             font=self.fonts.base.font,
             fill=self.colors.get(192),

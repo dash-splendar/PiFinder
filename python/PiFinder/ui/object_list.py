@@ -461,9 +461,13 @@ class UIObjectList(UITextMenu):
         return line_number_modifiers[line_number]
 
     @cache
-    def line_position(self, line_number, title_offset=20):
+    def line_position(self, line_number, title_offset=None):
+        # Legacy tuning was for 128x128. Scale those baseline y-positions using _s().
+        if title_offset is None:
+            title_offset = self.display_class.titlebar_height + self._s(3, min_px=2)
+
         line_number_positions = [0, 13, 25, 42, 60, 76, 89]
-        return line_number_positions[line_number] + title_offset
+        return self._s(line_number_positions[line_number], min_px=0) + title_offset
 
     def active(self):
         # trigger refilter
@@ -479,7 +483,7 @@ class UIObjectList(UITextMenu):
 
     def update(self, force: bool = False) -> None:
         self.clear_screen()
-        begin_x = 12
+        begin_x = self._s(12, min_px=4)
 
         # Check if loading just completed and refresh if so
         is_loading = self.catalogs.is_loading()
@@ -566,7 +570,17 @@ class UIObjectList(UITextMenu):
                 fill=self.colors.get(intensity),
             )
         # Draw current selection hint
-        self.draw.rectangle((-1, 60, 129, 80), outline=self.colors.get(128), width=1)
+        # Draw current selection hint (scaled from legacy 128px geometry)
+        focus_y = self.line_position(3)
+        y_top = focus_y - self._s(2, min_px=1)
+        y_bot = focus_y + self.fonts.bold.height + self._s(2, min_px=1)
+
+        self.draw.rectangle(
+            (-1, y_top, self.display_class.resX + 1, y_bot),
+            outline=self.colors.get(128),
+            width=max(1, self._s(1, min_px=1)),
+        )
+
         line_number, line_pos = 0, 0
         line_color = None
         for i in range(self._current_item_index - 3, self._current_item_index + 4):

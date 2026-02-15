@@ -173,13 +173,20 @@ class UISQMCalibration(UIModule):
     # ============================================
 
     def _draw_intro(self):
-        """Draw introduction screen"""
+        """Draw introduction screen (resolution-aware)"""
+        x = self._s(10, min_px=4)
+        gap = self._s(2, min_px=1)
+        block_gap = self._s(6, min_px=2)
+
+        y = self.display_class.titlebar_height + self._s(3, min_px=2)
+
         self.draw.text(
-            (10, 20),
+            (x, y),
             "SQM CAL",
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
+        y += self.fonts.bold.height + block_gap
 
         lines = [
             "Measure noise floor",
@@ -189,115 +196,132 @@ class UISQMCalibration(UIModule):
             "• ~3 minutes",
         ]
 
-        y = 40
         for line in lines:
             self.draw.text(
-                (10, y), line, font=self.fonts.base.font, fill=self.colors.get(192)
+                (x, y),
+                line,
+                font=self.fonts.base.font,
+                fill=self.colors.get(192),
             )
-            y += self.fonts.base.height + 2
+            y += self.fonts.base.height + gap
 
-        # Legend
+        # Legend pinned to bottom
+        y_legend = self.display_class.resY - self.fonts.base.height - self._s(4, min_px=2)
         self.draw.text(
-            (10, 110),
+            (x, y_legend),
             f"{self._SQUARE_} START  0 CANCEL",
             font=self.fonts.base.font,
             fill=self.colors.get(192),
         )
 
     def _draw_cap_on_instruction(self):
-        """Draw lens cap on instruction"""
+        """Draw lens cap on instruction (resolution-aware)"""
+        x = self._s(10, min_px=4)
+        gap = self._s(2, min_px=1)
+        block_gap = self._s(6, min_px=2)
+
+        y = self.display_class.titlebar_height + self._s(8, min_px=3)
+
         self.draw.text(
-            (10, 30),
+            (x, y),
             "PUT LENS CAP ON",
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
+        y += self.fonts.bold.height + block_gap
 
-        self.draw.text(
-            (10, 50),
+        lines = [
             "Cover the camera",
-            font=self.fonts.base.font,
-            fill=self.colors.get(192),
-        )
-        self.draw.text(
-            (10, 62),
             "lens completely to",
-            font=self.fonts.base.font,
-            fill=self.colors.get(192),
-        )
-        self.draw.text(
-            (10, 74),
             "block all light.",
-            font=self.fonts.base.font,
-            fill=self.colors.get(192),
-        )
+        ]
+        for line in lines:
+            self.draw.text(
+                (x, y),
+                line,
+                font=self.fonts.base.font,
+                fill=self.colors.get(192),
+            )
+            y += self.fonts.base.height + gap
 
-        # Legend
+        # Legend pinned to bottom
+        y_legend = self.display_class.resY - self.fonts.base.height - self._s(4, min_px=2)
         self.draw.text(
-            (10, 110),
+            (x, y_legend),
             f"{self._SQUARE_} READY  0 CANCEL",
             font=self.fonts.base.font,
             fill=self.colors.get(192),
         )
 
     def _draw_cap_off_instruction(self):
-        """Draw lens cap off instruction"""
+        """Draw lens cap off instruction (resolution-aware)"""
+        x = self._s(10, min_px=4)
+        gap = self._s(2, min_px=1)
+        block_gap = self._s(6, min_px=2)
+
+        y = self.display_class.titlebar_height + self._s(8, min_px=3)
+
         self.draw.text(
-            (10, 30),
+            (x, y),
             "REMOVE LENS CAP",
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
+        y += self.fonts.bold.height + block_gap
 
-        self.draw.text(
-            (10, 50),
+        lines = [
             "Remove the cap and",
-            font=self.fonts.base.font,
-            fill=self.colors.get(192),
-        )
-        self.draw.text(
-            (10, 62),
             "point at dark sky.",
-            font=self.fonts.base.font,
-            fill=self.colors.get(192),
-        )
-        self.draw.text(
-            (10, 74),
             "Wait for solve.",
-            font=self.fonts.base.font,
-            fill=self.colors.get(192),
-        )
+        ]
+        for line in lines:
+            self.draw.text(
+                (x, y),
+                line,
+                font=self.fonts.base.font,
+                fill=self.colors.get(192),
+            )
+            y += self.fonts.base.height + gap
 
-        # Legend
+        # Legend pinned to bottom
+        y_legend = self.display_class.resY - self.fonts.base.height - self._s(4, min_px=2)
         self.draw.text(
-            (10, 110),
+            (x, y_legend),
             f"{self._SQUARE_} READY  0 CANCEL",
             font=self.fonts.base.font,
             fill=self.colors.get(192),
         )
 
     def _draw_progress(self, label: str, current: int, total: int):
-        """Draw progress bar for frame capture"""
+        """Draw progress bar for frame capture (resolution-aware)"""
+        x = self._s(10, min_px=4)
+        gap = self._s(2, min_px=1)
+        block_gap = self._s(6, min_px=2)
+
+        y = self.display_class.titlebar_height + self._s(3, min_px=2)
+
         self.draw.text(
-            (10, 20),
+            (x, y),
             f"{label} FRAMES",
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
+        y += self.fonts.bold.height + block_gap
 
         # Progress text
         self.draw.text(
-            (10, 40),
+            (x, y),
             f"{current} / {total}",
             font=self.fonts.large.font,
             fill=self.colors.get(192),
         )
+        y += self.fonts.large.height + self._s(8, min_px=3)
 
-        # Progress bar
-        bar_x = 10
-        bar_y = 70
-        bar_width = 108
-        bar_height = 12
+        # Progress bar sized to current UI width
+        bar_x = x
+        bar_width = max(10, self.display_class.resX - (2 * x))
+        bar_height = max(self._s(12, min_px=6), self._s(12, min_px=6))
+        bar_y = y
 
         # Background
         self.draw.rectangle(
@@ -314,65 +338,74 @@ class UISQMCalibration(UIModule):
                 fill=self.colors.get(128),
             )
 
-        # Show different message for sky frames (which need plate solve)
+        # Status text below bar
+        y_status = bar_y + bar_height + self._s(8, min_px=3)
+        y_legend = self.display_class.resY - self.fonts.base.height - self._s(4, min_px=2)
+
         if label == "SKY":
-            # Show timeout countdown if waiting for solve
             if self.sky_capture_start_time is not None and current == 0:
                 elapsed = time.time() - self.sky_capture_start_time
                 remaining = int(self.sky_capture_timeout - elapsed)
                 if remaining > 0:
-                    self.draw.text(
-                        (10, 90),
-                        f"Wait for solve: {remaining}s",
-                        font=self.fonts.base.font,
-                        fill=self.colors.get(128),
-                    )
+                    msg = f"Wait for solve: {remaining}s"
+                    color = self.colors.get(128)
                 else:
-                    self.draw.text(
-                        (10, 90),
-                        "No solve detected",
-                        font=self.fonts.base.font,
-                        fill=self.colors.get(128),
-                    )
+                    msg = "No solve detected"
+                    color = self.colors.get(128)
             else:
-                self.draw.text(
-                    (10, 90),
-                    "Hold steady...",
-                    font=self.fonts.base.font,
-                    fill=self.colors.get(64),
-                )
-            # Show skip option
+                msg = "Hold steady..."
+                color = self.colors.get(64)
+
             self.draw.text(
-                (10, 110),
+                (x, y_status),
+                msg,
+                font=self.fonts.base.font,
+                fill=color,
+            )
+
+            # Skip option pinned to bottom
+            self.draw.text(
+                (x, y_legend),
                 "0: SKIP SKY",
                 font=self.fonts.base.font,
                 fill=self.colors.get(128),
             )
         else:
             self.draw.text(
-                (10, 90),
+                (x, y_status),
                 "Hold steady...",
                 font=self.fonts.base.font,
                 fill=self.colors.get(64),
             )
 
     def _draw_analyzing(self):
-        """Draw analyzing screen"""
+        """Draw analyzing screen (resolution-aware)"""
+        x = self._s(10, min_px=4)
+        gap = self._s(2, min_px=1)
+        block_gap = self._s(6, min_px=2)
+
+        y = self.display_class.titlebar_height + int(
+            (self.display_class.resY - self.display_class.titlebar_height) * 0.35
+        )
+
         self.draw.text(
-            (10, 40),
+            (x, y),
             "ANALYZING...",
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
+        y += self.fonts.bold.height + block_gap
 
         self.draw.text(
-            (10, 60),
+            (x, y),
             "Computing noise",
             font=self.fonts.base.font,
             fill=self.colors.get(128),
         )
+        y += self.fonts.base.height + gap
+
         self.draw.text(
-            (10, 72),
+            (x, y),
             "parameters...",
             font=self.fonts.base.font,
             fill=self.colors.get(128),
@@ -449,45 +482,65 @@ class UISQMCalibration(UIModule):
             )
 
         # Legend
+        # Legend pinned to bottom
+        x = self._s(10, min_px=4)
+        y_legend = self.display_class.resY - self.fonts.base.height - self._s(4, min_px=2)
         self.draw.text(
-            (10, 110),
+            (x, y_legend),
             f"{self._SQUARE_} DONE",
             font=self.fonts.base.font,
             fill=self.colors.get(192),
         )
 
     def _draw_error(self):
-        """Draw error screen"""
+        """Draw error screen (resolution-aware wrapping)"""
+        x = self._s(10, min_px=4)
+        gap = self._s(2, min_px=1)
+        block_gap = self._s(6, min_px=2)
+
+        y = self.display_class.titlebar_height + self._s(8, min_px=3)
+
         self.draw.text(
-            (10, 30),
+            (x, y),
             "ERROR",
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
+        y += self.fonts.bold.height + block_gap
 
-        # Wrap error message
-        y = 50
+        # Width-based wrapping instead of a hardcoded 18-char limit
+        available_px = max(1, self.display_class.resX - x - self._s(6, min_px=2))
+        max_chars = max(1, int(available_px / max(1, self.fonts.base.width)))
+
         words = self.error_message.split()
         line = ""
         for word in words:
-            test_line = line + " " + word if line else word
-            if len(test_line) <= 18:  # Rough character limit
+            test_line = (line + " " + word) if line else word
+            if len(test_line) <= max_chars:
                 line = test_line
             else:
-                self.draw.text(
-                    (10, y), line, font=self.fonts.base.font, fill=self.colors.get(192)
-                )
-                y += self.fonts.base.height + 2
+                if line:
+                    self.draw.text(
+                        (x, y),
+                        line,
+                        font=self.fonts.base.font,
+                        fill=self.colors.get(192),
+                    )
+                    y += self.fonts.base.height + gap
                 line = word
 
         if line:
             self.draw.text(
-                (10, y), line, font=self.fonts.base.font, fill=self.colors.get(192)
+                (x, y),
+                line,
+                font=self.fonts.base.font,
+                fill=self.colors.get(192),
             )
 
-        # Legend
+        # Legend pinned to bottom
+        y_legend = self.display_class.resY - self.fonts.base.height - self._s(4, min_px=2)
         self.draw.text(
-            (10, 110),
+            (x, y_legend),
             f"{self._SQUARE_} EXIT",
             font=self.fonts.base.font,
             fill=self.colors.get(192),

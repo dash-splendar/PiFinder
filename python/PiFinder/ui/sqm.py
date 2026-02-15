@@ -35,6 +35,7 @@ class UISQM(UIModule):
             color=self.colors.get(255),
             colors=self.colors,
             font=self.fonts.base,
+            ui_res=min(self.display_class.resolution),
         )
 
         # Marking menu definition
@@ -58,7 +59,8 @@ class UISQM(UIModule):
 
         # Show camera image in background (same processing as preview)
         image_obj = self.camera_image.copy()
-        image_obj = image_obj.resize((128, 128))
+        out = self.display_class.resX
+        image_obj = image_obj.resize((out, out))
         image_obj = subtract_background(image_obj, percent=0.5)
         image_obj = image_obj.convert("RGB")
         image_obj = ImageChops.multiply(image_obj, self.colors.red_image)
@@ -69,20 +71,32 @@ class UISQM(UIModule):
         # Draw semi-transparent dark overlay for text readability
         overlay_draw = ImageDraw.Draw(self.screen, "RGBA")
         overlay_draw.rectangle(
-            [(0, 0), (128, 128)],
+            [(0, 0), (self.display_class.resX, self.display_class.resY)],
             fill=(0, 0, 0, 180),  # Black with 70% opacity
         )
+
+        x_left = self._s(10, min_px=4)
+        x_units = self._s(12, min_px=5)
+        y_value = self._s(30, min_px=self.display_class.titlebar_height + self._s(6, min_px=2))
+
+        # Put units line roughly where it was on 128px, but scaled
+        y_units = self._s(68, min_px=y_value + self.fonts.huge.height + self._s(4, min_px=2))
+
+        # Bottom legend pinned to bottom
+        y_legend = self.display_class.resY - self.fonts.base.height - self._s(4, min_px=2)
+
 
         # Get SQM from shared state
         sqm_state = self.shared_state.sqm()
 
         if sqm_state.last_update is None:
             self.draw.text(
-                (10, 30),
+                (x_left, y_value),
                 _("NO SQM DATA"),
                 font=self.fonts.bold.font,
                 fill=self.colors.get(128),
             )
+
         else:
             sqm = sqm_state.value
             # Parse timestamp from ISO format to unix timestamp
@@ -100,17 +114,18 @@ class UISQM(UIModule):
             # If no details found, show SQM value only
             if details is None:
                 self.draw.text(
-                    (10, 30),
+                    (x_left, y_value),
                     f"{sqm:.2f}",
                     font=self.fonts.huge.font,
                     fill=self.colors.get(192),
                 )
                 self.draw.text(
-                    (12, 68),
+                    (x_units, y_units),
                     _("mag/arcsec²"),
                     font=self.fonts.base.font,
                     fill=self.colors.get(64),
                 )
+
                 return self.screen_update()
 
             if self.show_description and details:
@@ -119,71 +134,106 @@ class UISQM(UIModule):
                 desc_lines.append("─" * self.fonts.base.line_length)  # End marker
                 desc_text = "\n".join(desc_lines)
                 self.text_layout.set_text(desc_text, reset_pointer=False)
-                self.text_layout.set_available_lines(7)
+
+                gap = self._s(2, min_px=1)
+                y_title = self.display_class.titlebar_height + self._s(3, min_px=2)
 
                 # Title
                 self.draw.text(
-                    (0, 20),
+                    (0, y_title),
                     _("Bortle {bc}").format(bc=details["bortle_class"]),
                     font=self.fonts.bold.font,
                     fill=self.colors.get(255),
                 )
 
-                # Scrollable description
-                self.text_layout.draw((0, 38))
-
-                # Legend
+                # Legend pinned to bottom
                 back_text = _("BACK")
                 scroll_text = _("SCROLL")
                 self.draw.text(
-                    (0, 115),
+                    (0, y_legend),
                     f"{self._SQUARE_} {back_text}  {self._PLUSMINUS_} {scroll_text}",
                     font=self.fonts.base.font,
                     fill=self.colors.get(128),
                 )
+
+                # Scrollable description fills the space between title and legend
+                y_desc = y_title + self.fonts.bold.height + self._s(4, min_px=2)
+                available_px = max(0, y_legend - y_desc - gap)
+                available_lines = max(1, int(available_px // max(1, self.fonts.base.height)))
+                self.text_layout.set_available_lines(available_lines)
+                self.text_layout.draw((0, y_desc))
+
             else:
                 # Main SQM view
                 # Last calculation time
+                # Main SQM view
+                # Last calculation time
+                x_left = self._s(10, min_px=4)
+                y_meta = self.display_class.titlebar_height + self._s(1, min_px=1)
+                x_right = self.display_class.resX - self._s(4, min_px=2)
+
+                time_str = None
                 if sqm_timestamp:
                     elapsed = int(time.time() - sqm_timestamp)
                     if elapsed < 60:
                         time_str = _("{s}s ago").format(s=elapsed)
                     else:
                         time_str = _("{m}m ago").format(m=elapsed // 60)
+
+                if time_str:
                     self.draw.text(
-                        (10, 20),
+                        (x_left, y_meta),
                         time_str,
                         font=self.fonts.base.font,
                         fill=self.colors.get(64),
                     )
 
-                # Show star count and exposure time (right side)
+                # Gather right-side info first so we can right-align consistently
                 sqm_details = self.shared_state.sqm_details()
+                n_stars = 0
                 if sqm_details:
                     n_stars = sqm_details.get("n_matched_stars", 0)
-                    self.draw.text(
-                        (60, 20),
-                        f"{n_stars}★",
-                        font=self.fonts.base.font,
-                        fill=self.colors.get(64),
-                    )
 
                 image_metadata = self.shared_state.last_image_metadata()
+                exp_str = ""
                 if image_metadata and "exposure_time" in image_metadata:
                     exp_ms = image_metadata["exposure_time"] / 1000  # Convert µs to ms
                     if exp_ms >= 1000:
-                        exp_str = f"{exp_ms/1000:.2f}s"
+                        exp_str = f"{exp_ms / 1000:.2f}s"
                     else:
                         exp_str = f"{exp_ms:.0f}ms"
+
+                stars_str = f"{n_stars}★"
+
+                exp_w = self.fonts.base.getsize(exp_str)[0] if exp_str else 0
+                stars_w = self.fonts.base.getsize(stars_str)[0] if stars_str else 0
+
+                # Right-align exposure at the edge; put stars just left of exposure
+                if exp_str:
                     self.draw.text(
-                        (95, 20),
+                        (x_right - exp_w, y_meta),
                         exp_str,
                         font=self.fonts.base.font,
                         fill=self.colors.get(64),
                     )
 
+                if stars_str:
+                    self.draw.text(
+                        (x_right - exp_w - self._s(6, min_px=2) - stars_w, y_meta),
+                        stars_str,
+                        font=self.fonts.base.font,
+                        fill=self.colors.get(64),
+                    )
+
+                x_left = self._s(10, min_px=4)
+                x_units = self._s(12, min_px=5)
+
+                # Legacy y=30/68 on 128px -> anchor below titlebar, keep relative spacing
+                y_value = self.display_class.titlebar_height + self._s(6, min_px=2)
+                y_units = y_value + self.fonts.huge.height + self._s(4, min_px=2)
+
                 self.draw.text(
-                    (10, 30),
+                    (x_left, y_value),
                     f"{sqm:.2f}",
                     font=self.fonts.huge.font,
                     fill=self.colors.get(192),
@@ -191,24 +241,33 @@ class UISQM(UIModule):
 
                 # Units in small, subtle text
                 self.draw.text(
-                    (12, 68),
+                    (x_units, y_units),
                     _("mag/arcsec²"),
                     font=self.fonts.base.font,
                     fill=self.colors.get(64),
                 )
 
                 # Calibration indicator (right side of units line)
+                x_right = self.display_class.resX - self._s(4, min_px=2)
+
+                y_value = self.display_class.titlebar_height + self._s(6, min_px=2)
+                y_units = y_value + self.fonts.huge.height + self._s(4, min_px=2)
+
                 if self._is_calibrated():
+                    cal_txt = "CAL"
+                    cal_w = self.fonts.base.getsize(cal_txt)[0]
                     self.draw.text(
-                        (105, 68),
-                        "CAL",
+                        (x_right - cal_w, y_units),
+                        cal_txt,
                         font=self.fonts.base.font,
                         fill=self.colors.get(128),
                     )
                 else:
+                    cal_txt = "!CAL"
+                    cal_w = self.fonts.base.getsize(cal_txt)[0]
                     self.draw.text(
-                        (98, 68),
-                        "!CAL",
+                        (x_right - cal_w, y_units),
+                        cal_txt,
                         font=self.fonts.base.font,
                         fill=self.colors.get(64),
                     )
@@ -218,25 +277,32 @@ class UISQM(UIModule):
                     sqm_alt = sqm_details.get("sqm_altitude_corrected")
                     if sqm_alt:
                         self.draw.text(
-                            (12, 80),
+                            (self._s(12, min_px=5), y_units + self.fonts.base.height + self._s(2, min_px=1)),
                             f"alt: {sqm_alt:.2f}",
                             font=self.fonts.base.font,
                             fill=self.colors.get(64),
                         )
 
+                x_left = self._s(10, min_px=4)
+
                 # Bortle class
                 if details:
+                    # Place this in the lower third (legacy y=92 on 128px)
+                    y_bortle = self.display_class.titlebar_height + int(
+                        (self.display_class.resY - self.display_class.titlebar_height) * 0.72
+                    )
                     self.draw.text(
-                        (10, 92),
+                        (x_left, y_bortle),
                         _("Bortle {bc}").format(bc=details["bortle_class"]),
                         font=self.fonts.base.font,
                         fill=self.colors.get(128),
                     )
 
-                # Legend
+                # Legend pinned to bottom
                 details_text = _("DETAILS")
+                y_legend = self.display_class.resY - self.fonts.base.height - self._s(4, min_px=2)
                 self.draw.text(
-                    (10, 110),
+                    (x_left, y_legend),
                     f"{self._SQUARE_} {details_text}",
                     font=self.fonts.base.font,
                     fill=self.colors.get(64),

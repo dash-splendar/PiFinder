@@ -97,9 +97,15 @@ class UIAlign(UIModule):
         self.visible_stars = None
         self.star_list = np.empty((0, 2))
         self.alignment_star = None
+        solve_pixel = self.config_object.get_option("solve_pixel", (256, 256))
+        # solve_pixel is stored in camera/solver pixel space (legacy assumes ~512x512 with center at 256,256).
+        # Map solve_pixel -> UI pixel space for any square UI resolution.
+        solve_px = self.config_object.get_option("solve_pixel", (256, 256))
+        cam_space = 512.0  # legacy assumption: full camera solve space is 512x512
+
         self.marker_position = (
-            self.config_object.get_option("solve_pixel", (256, 256))[1] / 4,
-            self.config_object.get_option("solve_pixel", (256, 256))[0] / 4,
+            (solve_px[1] / cam_space) * self.display_class.resX,
+            (solve_px[0] / cam_space) * self.display_class.resY,
         )
 
         # Marking menu definition
@@ -110,35 +116,48 @@ class UIAlign(UIModule):
         )
 
     def draw_reticle(self):
-        """
-        draw the reticle if desired
-        """
-        brightness = self.config_object.get_option("chart_reticle", 128)
-        if brightness == 0:
-            # None....
-            return
+        radii = [40, 95, 190]
+        cx, cy = 240, 240
 
-        # No solution yet (initial state before first successful solve)
-        if not self.solution or self.solution["RA"] is None:
-            return
-
-        reticle_position = self.starfield.radec_to_xy(
-            self.solution["RA"], self.solution["Dec"]
-        )
-
-        fov = self.fov
-        for circ_deg in [4, 2, 0.5]:
-            circ_rad = ((circ_deg / fov) * self.display_class.fov_res) / 2
+        for radius in radii:
             bbox = [
-                reticle_position[0] - circ_rad,
-                reticle_position[1] - circ_rad,
-                reticle_position[0] + circ_rad,
-                reticle_position[1] + circ_rad,
+                cx - radius,
+                cy - radius,
+                cx + radius,
+                cy + radius
             ]
-            self.draw.arc(bbox, 20, 70, fill=self.colors.get(brightness))
-            self.draw.arc(bbox, 110, 160, fill=self.colors.get(brightness))
-            self.draw.arc(bbox, 200, 250, fill=self.colors.get(brightness))
-            self.draw.arc(bbox, 290, 340, fill=self.colors.get(brightness))
+            self.draw.arc(bbox, start=0, end=360, fill=self.colors.get(255), width=3)
+
+            inset = 30
+            w = 4
+
+            # top
+            self.draw.line(
+                [cx, cy - radius, cx, cy - radius + inset],
+                fill=self.colors.get(255),
+                width=w
+            )
+
+            # bottom
+            self.draw.line(
+                [cx, cy + radius - inset, cx, cy + radius],
+                fill=self.colors.get(255),
+                width=w
+            )
+
+            # left
+            self.draw.line(
+                [cx - radius, cy, cx - radius + inset, cy],
+                fill=self.colors.get(255),
+                width=w
+            )
+
+            # right
+            self.draw.line(
+                [cx + radius - inset, cy, cx + radius, cy],
+                fill=self.colors.get(255),
+                width=w
+            )
 
     def draw_marker(self):
         """
@@ -157,21 +176,28 @@ class UIAlign(UIModule):
         y_pos = round(self.marker_position[1])
 
         # Draw cross
-        self.draw.line(
-            [x_pos, y_pos - 8, x_pos, y_pos - 3],
-            fill=self.colors.get(255),
-        )
-        self.draw.line(
-            [x_pos, y_pos + 3, x_pos, y_pos + 8],
-            fill=self.colors.get(255),
-        )
-        self.draw.line(
-            [x_pos - 8, y_pos, x_pos - 3, y_pos],
-            fill=self.colors.get(255),
-        )
+        arm_outer = 30
+        arm_inner = 12
+        w = 3
+
+        # Draw cross (scale from legacy 128px UI)
+        outer = self._s(8, min_px=3)
+        inner = self._s(3, min_px=1)
 
         self.draw.line(
-            [x_pos + 3, y_pos, x_pos + 8, y_pos],
+            [x_pos, y_pos - outer, x_pos, y_pos - inner],
+            fill=self.colors.get(255),
+        )
+        self.draw.line(
+            [x_pos, y_pos + inner, x_pos, y_pos + outer],
+            fill=self.colors.get(255),
+        )
+        self.draw.line(
+            [x_pos - outer, y_pos, x_pos - inner, y_pos],
+            fill=self.colors.get(255),
+        )
+        self.draw.line(
+            [x_pos + inner, y_pos, x_pos + outer, y_pos],
             fill=self.colors.get(255),
         )
 
@@ -260,11 +286,15 @@ class UIAlign(UIModule):
                 else:
                     hint_text = _(f"{self._SQUARE_} SAVE / 0 CANCEL")
                 self.draw.text(
-                    (15, self.display_class.resY - self.fonts.base.height - 2),
+                    (
+                        self._s(15, min_px=4),
+                        self.display_class.resY - self.fonts.base.height - self._s(2, min_px=1),
+                    ),
                     hint_text,
                     font=self.fonts.base.font,
                     fill=self.colors.get(255),
                 )
+
 
         else:
             self.draw.rectangle(
@@ -272,18 +302,18 @@ class UIAlign(UIModule):
                 fill=self.colors.get(0),
             )
             self.draw.text(
-                (16, self.display_class.titlebar_height + 10),
+                (self._s(16, min_px=6), self.display_class.titlebar_height + self._s(10, min_px=4)),
                 _("Can't plot"),
                 font=self.fonts.large.font,
                 fill=self.colors.get(255),
             )
             self.draw.text(
                 (
-                    26,
+                    self._s(26, min_px=10),
                     self.display_class.titlebar_height
-                    + 10
+                    + self._s(10, min_px=4)
                     + self.fonts.large.height
-                    + 4,
+                    + self._s(4, min_px=2),
                 ),
                 _("No Solve Yet"),
                 font=self.fonts.base.font,
@@ -434,12 +464,16 @@ class UIAlign(UIModule):
     def key_number(self, number):
         if self.align_mode:
             if number == 1:
-                # reset reticle to center
+                # reset reticle to center (solve space)
                 self.shared_state.set_solve_pixel((256, 256))
                 self.config_object.set_option("solve_pixel", (256, 256))
-                self.marker_position = (64, 64)
+
+                # reset marker to UI center (any resolution)
+                self.marker_position = (self.display_class.resX / 2, self.display_class.resY / 2)
+
                 self.update(force=True)
                 self.align_mode = False
+
             if number == 0:
                 # cancel without changing alignment
                 self.align_mode = False

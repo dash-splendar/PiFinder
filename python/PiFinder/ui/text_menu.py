@@ -73,43 +73,53 @@ class UITextMenu(UIModule):
     def update(self, force=False):
         # clear screen
         self.clear_screen()
-        # Draw current selection hint
-        self.draw.rectangle((-1, 60, 129, 80), outline=self.colors.get(128), width=1)
+
+        # Legacy y ladder was tuned for 128px; scale it and anchor to title bar
+        title_offset = self.display_class.titlebar_height + self._s(3, min_px=2)
+        y_ladder = [0, 13, 25, 40, 60, 76, 89]
+        y_ladder = [self._s(y, min_px=0) + title_offset for y in y_ladder]
+
+        # X positions (scaled)
+        line_horiz_pos = self._s(13, min_px=4)
+        check_x = self._s(3, min_px=1)
+
+        # Draw current selection hint around the "selected" (large font) line (legacy base=40 + title_offset)
+        focus_y = self._s(40, min_px=0) + title_offset
+        y_top = focus_y - self._s(2, min_px=1)
+        y_bot = focus_y + self.fonts.large.height + self._s(2, min_px=1)
+
+        self.draw.rectangle(
+            (-1, y_top, self.display_class.resX + 1, y_bot),
+            outline=self.colors.get(128),
+            width=max(1, self._s(1, min_px=1)),
+        )
 
         line_number = 0
-        line_horiz_pos = 13
 
         for i in range(self._current_item_index - 3, self._current_item_index + 4):
             if i >= 0 and i < self.get_nr_of_menu_items():
                 # figure out line position / color / font
+                # figure out line position / color / font (resolution-aware)
                 line_font = self.fonts.base
                 if line_number == 0:
                     line_color = 96
-                    line_pos = 0
                 if line_number == 1:
                     line_color = 128
-                    line_pos = 13
                 if line_number == 2:
                     line_color = 192
                     line_font = self.fonts.bold
-                    line_pos = 25
                 if line_number == 3:
                     line_color = 256
                     line_font = self.fonts.large
-                    line_pos = 40
                 if line_number == 4:
                     line_color = 192
                     line_font = self.fonts.bold
-                    line_pos = 60
                 if line_number == 5:
                     line_color = 128
-                    line_pos = 76
                 if line_number == 6:
                     line_color = 96
-                    line_pos = 89
 
-                # Offset for title
-                line_pos += 20
+                line_pos = y_ladder[line_number]
 
                 # figure out line text
                 item_text = str(self._menu_items[i])
@@ -136,7 +146,7 @@ class UITextMenu(UIModule):
                     in self._selected_values
                 ):
                     self.draw.text(
-                        (3, line_pos),
+                        (check_x, line_pos),
                         self._CHECKMARK,
                         font=line_font.font,
                         fill=self.colors.get(line_color),

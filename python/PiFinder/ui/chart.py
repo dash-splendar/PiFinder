@@ -177,20 +177,23 @@ class UIChart(UIModule):
                     ra_h, ra_m, ra_s = calc_utils.ra_to_hms(self.solution["RA"])
                     dec_d, dec_m, dec_s = calc_utils.dec_to_dms(self.solution["Dec"])
                     ra_dec_disp = f"{ra_h:02d}:{ra_m:02d}:{ra_s:02d} / {dec_d:02d}°{dec_m:02d}:{dec_s}"
+                    y = self.display_class.resY - self.fonts.base.height - self._s(2, min_px=1)
                     self.draw.text(
-                        (0, 114),
+                        (self._s(0, min_px=0), y),
                         ra_dec_disp,
                         font=self.fonts.base.font,
                         fill=self.colors.get(255),
                     )
+
                 if self.config_object.get_option("chart_radec") == "Degr":
                     ra_h, ra_m, ra_s = calc_utils.ra_to_hms(self.solution["RA"])
                     dec_d, dec_m, dec_s = calc_utils.dec_to_dms(self.solution["Dec"])
                     ra_dec_disp = (
                         f"{self.solution['RA']:0>6.2f} / {self.solution['Dec']:0>5.2f}"
                     )
+                    y = self.display_class.resY - self.fonts.base.height - self._s(2, min_px=1)
                     self.draw.text(
-                        (0, 114),
+                        (self._s(0, min_px=0), y),
                         ra_dec_disp,
                         font=self.fonts.base.font,
                         fill=self.colors.get(255),
@@ -206,18 +209,18 @@ class UIChart(UIModule):
                 fill=self.colors.get(0),
             )
             self.draw.text(
-                (16, self.display_class.titlebar_height + 10),
+                (self._s(16, min_px=6), self.display_class.titlebar_height + self._s(10, min_px=4)),
                 _("Can't plot"),
                 font=self.fonts.large.font,
                 fill=self.colors.get(255),
             )
             self.draw.text(
                 (
-                    26,
+                    self._s(26, min_px=10),
                     self.display_class.titlebar_height
-                    + 10
+                    + self._s(10, min_px=4)
                     + self.fonts.large.height
-                    + 4,
+                    + self._s(4, min_px=2),
                 ),
                 _("No Solve Yet"),
                 font=self.fonts.base.font,

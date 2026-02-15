@@ -31,39 +31,45 @@ class UILocationList(UITextMenu):
         return {"name": "Locations", "select": "single", "items": items}
 
     def draw_action_menu(self):
-        """Draw the action menu for selected location"""
+        """Draw the action menu for selected location (resolution-aware)"""
         self.clear_screen()
-        draw_pos = self.display_class.titlebar_height + 2
+
+        x = self._s(0, min_px=0)
+        gap = self._s(2, min_px=1)
+
+        draw_pos = self.display_class.titlebar_height + self._s(3, min_px=2)
 
         loc = self.item_definition["items"][self._current_item_index]["value"]
+
         # Draw name in bold
         self.draw.text(
-            (0, draw_pos),
+            (x, draw_pos),
             f"{loc.name}",
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
-        draw_pos += 12
+        draw_pos += self.fonts.bold.height + gap
 
         # Draw coordinates in base font
         self.draw.text(
-            (0, draw_pos),
+            (x, draw_pos),
             f"{loc.latitude:.2f}°, {loc.longitude:.2f}°, {loc.height:.0f}m",
             font=self.fonts.base.font,
             fill=self.colors.get(128),
         )
-        draw_pos += 16
+        draw_pos += self.fonts.base.height + self._s(6, min_px=2)
 
         # Draw actions
+        line_h = self.fonts.base.height + gap
         for i, action in enumerate(self.actions):
             color = 255 if i == self.action_index else 128
             self.draw.text(
-                (0, draw_pos),
+                (x, draw_pos),
                 action,
                 font=self.fonts.base.font,
                 fill=self.colors.get(color),
             )
-            draw_pos += 10
+            draw_pos += line_h
 
     def perform_action(self):
         """Execute the selected action on the current location"""

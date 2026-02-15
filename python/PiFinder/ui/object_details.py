@@ -83,14 +83,18 @@ class UIObjectDetails(UIModule):
             color=self.colors.get(255),
             colors=self.colors,
             font=self.fonts.base,
+            ui_res=min(self.display_class.resolution),
         )
+
         self.ScrollTextLayout = functools.partial(
             TextLayouterScroll,
             draw=self.draw,
             color=self.colors.get(255),
             font=self.fonts.base,
         )
-        self.space_calculator = SpaceCalculatorFixed(18)
+        # Character width should track current UI width (font.line_length changes with resX)
+        self.space_calculator = SpaceCalculatorFixed(self.fonts.base.line_length)
+
         self.texts = {
             "type-const": self.simpleTextLayout(
                 _("No Object Found"),
@@ -240,21 +244,23 @@ class UIObjectDetails(UIModule):
         return catalog and catalog.initialized
 
     def _render_pointing_instructions(self):
-        # Pointing Instructions
+        # Pointing Instructions (resolution-aware placement)
+        x = self._s(10, min_px=4)
+
+        # Legacy y=70/90 on a 128px UI => roughly mid/lower area.
+        y1 = self.display_class.titlebar_height + int(
+            (self.display_class.resY - self.display_class.titlebar_height) * 0.48)
+        y2 = y1 + self.fonts.large.height + self._s(8, min_px=2)
+
+        def _two_line(line1: str, line2: str) -> None:
+            self.draw.text((x, y1), line1, font=self.fonts.large.font, fill=self.colors.get(255))
+            self.draw.text((x, y2), line2, font=self.fonts.large.font, fill=self.colors.get(255))
+
         if self.shared_state.solution() is None:
-            self.draw.text(
-                (10, 70),
+            _two_line(
                 _("No solve"),  # TRANSLATORS: No solve yet... (Part 1/2)
-                font=self.fonts.large.font,
-                fill=self.colors.get(255),
-            )
-            self.draw.text(
-                (10, 90),
-                _("yet{elipsis}").format(
-                    elipsis="." * int(self._elipsis_count / 10)
-                ),  # TRANSLATORS: No solve yet... (Part 2/2)
-                font=self.fonts.large.font,
-                fill=self.colors.get(255),
+                _("yet{elipsis}").format(elipsis="." * int(self._elipsis_count / 10)),
+                # TRANSLATORS: No solve yet... (Part 2/2)
             )
             self._elipsis_count += 1
             if self._elipsis_count > 39:
@@ -262,19 +268,10 @@ class UIObjectDetails(UIModule):
             return
 
         if not self.shared_state.altaz_ready():
-            self.draw.text(
-                (10, 70),
+            _two_line(
                 _("Searching"),  # TRANSLATORS: Searching for GPS (Part 1/2)
-                font=self.fonts.large.font,
-                fill=self.colors.get(255),
-            )
-            self.draw.text(
-                (10, 90),
-                _("for GPS{elipsis}").format(
-                    elipsis="." * int(self._elipsis_count / 10)
-                ),  # TRANSLATORS: Searching for GPS (Part 2/2)
-                font=self.fonts.large.font,
-                fill=self.colors.get(255),
+                _("for GPS{elipsis}").format(elipsis="." * int(self._elipsis_count / 10)),
+                # TRANSLATORS: Searching for GPS (Part 2/2)
             )
             self._elipsis_count += 1
             if self._elipsis_count > 39:
@@ -282,17 +279,9 @@ class UIObjectDetails(UIModule):
             return
 
         if not self._check_catalog_initialized():
-            self.draw.text(
-                (10, 70),
+            _two_line(
                 _("Calculating"),
-                font=self.fonts.large.font,
-                fill=self.colors.get(255),
-            )
-            self.draw.text(
-                (10, 90),
                 _(f"positions{'.' * int(self._elipsis_count / 10)}"),
-                font=self.fonts.large.font,
-                fill=self.colors.get(255),
             )
             self._elipsis_count += 1
             if self._elipsis_count > 39:
@@ -309,18 +298,9 @@ class UIObjectDetails(UIModule):
 
         # Check if aim_degrees returned valid values
         if point_az is None or point_alt is None:
-            # No valid pointing data available
-            self.draw.text(
-                (10, 70),
+            _two_line(
                 _("Calculating"),
-                font=self.fonts.large.font,
-                fill=self.colors.get(255),
-            )
-            self.draw.text(
-                (10, 90),
                 _(f"position{'.' * int(self._elipsis_count / 10)}"),
-                font=self.fonts.large.font,
-                fill=self.colors.get(255),
             )
             self._elipsis_count += 1
             if self._elipsis_count > 39:
@@ -402,55 +382,59 @@ class UIObjectDetails(UIModule):
         if self.object_display_mode in [DM_POSS, DM_SDSS]:
             self.screen.paste(self.object_image)
 
-        if self.object_display_mode == DM_DESC or self.object_display_mode == DM_LOCATE:
-            # catalog and entry field i.e. NGC-311
-            self.refresh_designator()
-            desc_available_lines = 4
-            desig = self.texts["designator"]
-            desig.draw((0, 20))
+        gap = self._s(2, min_px=1)
 
-            # Object TYPE and Constellation i.e. 'Galaxy    PER'
+        # Header block shared by DESC + LOCATE
+        if self.object_display_mode in (DM_DESC, DM_LOCATE):
+            self.refresh_designator()
+
+            y = self.display_class.titlebar_height + self._s(3, min_px=2)
+
+            desig = self.texts["designator"]
+            desig.draw((0, y))
+            y += self.fonts.large.height + gap
+
             typeconst = self.texts.get("type-const")
             if typeconst:
-                typeconst.draw((0, 36))
+                typeconst.draw((0, y))
+                y += self.fonts.bold.height + gap
 
         if self.object_display_mode == DM_LOCATE:
             self._render_pointing_instructions()
 
         elif self.object_display_mode == DM_DESC:
-            # Object Magnitude and size i.e. 'Mag:4.0   Sz:7"'
+            y = self.display_class.titlebar_height + self._s(3, min_px=2)
+            y += self.fonts.large.height + gap
+            y += self.fonts.bold.height + gap
+
+            # Magnitude / Size
             magsize = self.texts.get("magsize")
-            posy = 52
             if magsize and magsize.text.strip():
                 if self.object:
-                    # check for visibility and adjust mag/size text color
-                    obj_altitude = calc_utils.calc_object_altitude(
-                        self.shared_state, self.object
-                    )
-
-                    if obj_altitude:
-                        if obj_altitude < 10:
-                            # Not really visible
-                            magsize.set_color = self.colors.get(128)
-                magsize.draw((0, posy))
-                posy += 17
+                    obj_altitude = calc_utils.calc_object_altitude(self.shared_state, self.object)
+                    if obj_altitude and obj_altitude < 10:
+                        # Not really visible
+                        magsize.set_color = self.colors.get(128)
+                magsize.draw((0, y))
+                y += self.fonts.bold.height + self._s(3, min_px=1)
             else:
-                posy += 3
-                desc_available_lines += 1  # extra lines for description
+                # If no magsize line, we just reclaim the space by not advancing y
+                pass
 
-            # Common names for this object, i.e. M13 -> Hercules cluster
+            # AKA line
             aka = self.texts.get("aka")
             if aka and aka.text.strip():
-                aka.draw((0, posy))
-                posy += 11
-            else:
-                desc_available_lines += 1  # extra lines for description
+                aka.draw((0, y))
+                y += self.fonts.base.height + self._s(2, min_px=1)
 
-            # Remaining lines with object description
+            # Description: compute how many lines can fit from y to bottom
             desc = self.texts.get("desc")
             if desc:
+                remaining_px = max(0, self.display_class.resY - y)
+                # Keep at least 4 (legacy), but allow more at higher resolutions
+                desc_available_lines = max(4, int(remaining_px // max(1, self.fonts.base.height)))
                 desc.set_available_lines(desc_available_lines)
-                desc.draw((0, posy))
+                desc.draw((0, y))
 
         return self.screen_update()
 

@@ -111,9 +111,10 @@ class UITextEntry(UIModule):
         self.keys = KeyPad()
         self.cursor_width = self.fonts.bold.width
         self.cursor_height = self.fonts.bold.height
-        self.text_x = 7
-        self.text_x_end = 128 - self.text_x
-        self.text_y = self.display_class.titlebar_height + 2
+
+        self.text_x = self._s(7, min_px=3)
+        self.text_x_end = self.display_class.resX - self.text_x
+        self.text_y = self.display_class.titlebar_height + self._s(2, min_px=1)
 
         # Async search state
         self._search_timer = None
@@ -123,12 +124,14 @@ class UITextEntry(UIModule):
         self.SEARCH_DEBOUNCE_MS = 250  # milliseconds
 
     def draw_text_entry(self):
-        line_text_y = self.text_y + 15
+        gap = self._s(3, min_px=1)
+        line_text_y = self.text_y + self.fonts.bold.height + gap
         self.draw.line(
             [(self.text_x, line_text_y), (self.text_x_end, line_text_y)],
             fill=self.half_red,
-            width=1,
+            width=max(1, self._s(1, min_px=1)),
         )
+
         self.draw.text(
             (self.text_x, self.text_y),
             self.current_text,
@@ -169,21 +172,48 @@ class UITextEntry(UIModule):
             )
 
     def draw_keypad(self):
-        key_size = (38, 23)
-        padding = 0
-        start_x, start_y = self.text_x, 32
+        # Layout: 3 columns x 4 rows beneath the entry line
+        pad = self._s(2, min_px=1)
+        inner_pad_x = self._s(2, min_px=1)
+        inner_pad_y = self._s(1, min_px=1)
+
+        start_x = self.text_x
+        # Place keypad below the underline / entry text area
+        start_y = self.text_y + self.fonts.bold.height + self._s(10, min_px=4)
+
+        # Available area
+        avail_w = max(1, self.display_class.resX - start_x - self.text_x)
+        avail_h = max(1, self.display_class.resY - start_y - self._s(2, min_px=1))
+
+        cols, rows = 3, 4
+
+        # Compute key size so the grid fits the available space
+        key_w = max(self._s(30, min_px=18), (avail_w - (pad * (cols - 1))) // cols)
+        key_h = max(self._s(18, min_px=14), (avail_h - (pad * (rows - 1))) // rows)
+
+        outline_w = max(1, self._s(1, min_px=1))
 
         for i, (num, letters) in enumerate(self.keys):
-            x = start_x + (i % 3) * (key_size[0] + padding)
-            y = start_y + (i // 3) * (key_size[1] + padding)
+            x = start_x + (i % cols) * (key_w + pad)
+            y = start_y + (i // cols) * (key_h + pad)
+
             self.draw.rectangle(
-                [x, y, x + key_size[0], y + key_size[1]], outline=self.half_red, width=1
+                [x, y, x + key_w, y + key_h],
+                outline=self.half_red,
+                width=outline_w,
             )
+
+            # Top-left: number
             self.draw.text(
-                (x + 2, y), str(num), font=self.fonts.base.font, fill=self.half_red
+                (x + inner_pad_x, y + inner_pad_y),
+                str(num),
+                font=self.fonts.base.font,
+                fill=self.half_red,
             )
+
+            # Below: letters label
             self.draw.text(
-                (x + 2, y + 8),
+                (x + inner_pad_x, y + inner_pad_y + self.fonts.base.height),
                 letters[1],
                 font=self.fonts.bold.font,
                 fill=self.colors.get(192),
@@ -208,11 +238,15 @@ class UITextEntry(UIModule):
             result_count = len(self.search_results)
 
         formatted_len = format_number(result_count, 4).strip()
+        pad = self._s(2, min_px=1)
         self.text_x_end = (
-            128 - 2 - self.text_x - self.bold.font.getbbox(formatted_len)[2]
+                self.display_class.resX
+                - pad
+                - self.text_x
+                - self.bold.font.getbbox(formatted_len)[2]
         )
         self.draw.text(
-            (self.text_x_end + 2, self.text_y),
+            (self.text_x_end + pad, self.text_y),
             formatted_len,
             font=self.bold.font,
             fill=self.half_red,
@@ -377,7 +411,10 @@ class UITextEntry(UIModule):
             self._search_version += 1
 
     def update(self, force=False):
-        self.draw.rectangle((0, 0, 128, 128), fill=self.colors.get(0))
+        self.draw.rectangle(
+            (0, 0, self.display_class.resX, self.display_class.resY),
+            fill=self.colors.get(0),
+        )
 
         # Set title based on mode (will be drawn by screen_update())
         if self.text_entry_mode:
@@ -396,3 +433,4 @@ class UITextEntry(UIModule):
             self.draw_results()
 
         return self.screen_update()
+

@@ -92,13 +92,14 @@ class BlinkingCursor:
         if not self.is_visible():
             return
 
-        cursor_width = 2
-        cursor_height = height - 4
+        cursor_width = max(2, int(round(width * 0.18)))
+        cursor_y_offset = max(1, int(round(height * 0.18)))
+        cursor_height = max(1, height - max(2, int(round(height * 0.12))))
 
-        # Create a simple blended cursor by drawing with half_red color
         for cy in range(cursor_height):
             for cx in range(cursor_width):
-                pixel_x, pixel_y = x + cx, y + 2 + cy
+                pixel_x, pixel_y = x + cx, y + cursor_y_offset + cy
+
                 if 0 <= pixel_x < screen.width and 0 <= pixel_y < screen.height:
                     # Get current pixel and blend with red
                     current_pixel = screen.getpixel((pixel_x, pixel_y))
@@ -616,18 +617,44 @@ class UIRADecEntry(UIModule):
         self.base = self.fonts.base
 
         # Layout configuration
+        # Layout configuration (scale legacy 128px-tuned constants to current square UI)
         self.layout = LayoutConfig()
-        self.field_height = self.layout.FIELD_HEIGHT
-        self.label_x = self.layout.LABEL_X
-        self.field_start_x = self.layout.FIELD_START_X
-        self.ra_label_y = self.layout.RA_LABEL_Y
-        self.ra_y = self.layout.RA_Y
-        self.dec_label_y = self.layout.DEC_LABEL_Y
-        self.dec_y = self.layout.DEC_Y
-        self.epoch_label_y = self.layout.EPOCH_LABEL_Y
-        self.epoch_y = self.layout.EPOCH_Y
-        self.field_width = self.layout.FIELD_WIDTH
-        self.field_gap = self.layout.FIELD_GAP
+
+        pad_x = self._s(5, min_px=2)
+        pad_y = self._s(6, min_px=2)
+        gap_y = self._s(10, min_px=4)
+
+        # Field geometry
+        self.field_height = max(self._s(self.layout.FIELD_HEIGHT, min_px=10),
+                                self.fonts.base.height + self._s(6, min_px=2))
+        self.field_width = max(self._s(self.layout.FIELD_WIDTH, min_px=18), self._s(24, min_px=18))
+        # FIELD_GAP in this file is a "start-to-start" step; keep legacy spacing proportionate
+        self.field_gap = self._s(self.layout.FIELD_GAP, min_px=self.field_width + self._s(4, min_px=2))
+
+        # X positioning
+        self.label_x = self._s(self.layout.LABEL_X, min_px=0)
+        self.field_start_x = self._s(self.layout.FIELD_START_X, min_px=pad_x + self._s(24, min_px=12))
+
+        # Y positioning: anchor below title bar instead of absolute 18/28/56/84
+        y0 = self.display_class.titlebar_height + pad_y
+        self.ra_y = y0
+        self.dec_y = self.ra_y + self.field_height + gap_y
+        self.epoch_y = self.dec_y + self.field_height + gap_y
+
+        # Keep these attributes (even though we don't use *_label_y anymore)
+        self.ra_label_y = self.ra_y
+        self.dec_label_y = self.dec_y
+        self.epoch_label_y = self.epoch_y
+
+        # Bottom bar height: 2 lines of base font + padding
+        self.bottom_bar_height = max(self._s(self.layout.BOTTOM_BAR_HEIGHT, min_px=16),
+                                     (self.fonts.base.height * 2) + self._s(8, min_px=4))
+
+        # Cursor width: scale from legacy 2px
+        self.cursor_width = max(2, self._s(self.layout.CURSOR_WIDTH, min_px=2))
+
+        # Format indicator x offset (legacy 52)
+        self.format_indicator_offset = self._s(self.layout.FORMAT_INDICATOR_OFFSET, min_px=self._s(20, min_px=10))
 
     def _sync_from_logic(self):
         state = self.logic.get_current_state()
@@ -781,18 +808,19 @@ class UIRADecEntry(UIModule):
     def _draw_field_complete(self, x, y, width, text, color, field_index):
         """Draw field text and cursor in one method"""
         text_width = 0
-        text_y = y + (self.field_height - 12) // 2
+        text_y = y + (self.field_height - self.base.height) // 2
         base_text_x = x
 
         # draw DEC sign if dec field
         if self._is_dec_field(field_index):
             self.draw.text(
-                (base_text_x + 3, text_y),
+                (base_text_x + self._s(3, min_px=1), text_y),
                 self.dec_sign,
                 font=self.base.font,
                 fill=color,
             )
-            base_text_x += 2  # offset text position for sign
+            base_text_x += self._s(2, min_px=1)  # offset text position for sign
+
         if text:
             text_bbox = self.base.font.getbbox(text)
             text_width = text_bbox[2] - text_bbox[0]
@@ -813,12 +841,13 @@ class UIRADecEntry(UIModule):
             else:
                 cursor_x = base_text_x + (width - text_width) // 2 + text_width
             self.cursor.draw(
-                self.screen, cursor_x, y, self.layout.CURSOR_WIDTH, self.field_height
+                self.screen, cursor_x, y, self.cursor_width, self.field_height
             )
 
     def _draw_field_labels(self):
         """Draw coordinate labels (RA:, DEC:, EPOCH:)"""
-        label_offset = (self.field_height - 12) // 2
+        label_offset = (self.field_height - self.base.height) // 2
+
         self.draw.text(
             (self.label_x, self.ra_y + label_offset),
             _("RA:"),
@@ -853,16 +882,18 @@ class UIRADecEntry(UIModule):
                     (gap_center2, y), ":", font=self.base.font, fill=self.red
                 )
         elif self.coord_format in [1, 2]:  # Mixed/Decimal - draw unit indicators
-            indicator_x = self.field_start_x + self.layout.FORMAT_INDICATOR_OFFSET
+            indicator_x = self.field_start_x + self.format_indicator_offset
+
             ra_unit, dec_unit = ("h", "°") if self.coord_format == 1 else ("°", "°")
+            y_off = self._s(4, min_px=1)
             self.draw.text(
-                (indicator_x, self.ra_y + 4),
+                (indicator_x, self.ra_y + y_off),
                 ra_unit,
                 font=self.base.font,
                 fill=self.half_red,
             )
             self.draw.text(
-                (indicator_x, self.dec_y + 4),
+                (indicator_x, self.dec_y + y_off),
                 dec_unit,
                 font=self.base.font,
                 fill=self.half_red,
@@ -878,12 +909,18 @@ class UIRADecEntry(UIModule):
         return False
 
     def draw_bottom_bar(self):
-        """Draw bottom bar with navigation instructions"""
-        bar_y = self.height - self.layout.BOTTOM_BAR_HEIGHT
+        """Draw bottom bar with navigation instructions (resolution-aware)"""
+        bar_y = self.height - self.bottom_bar_height
+
+        x_pad = self._s(2, min_px=1)
+        y_pad = self._s(2, min_px=1)
+        sep_w = max(1, self._s(1, min_px=1))
 
         # Draw separator line
         self.draw.line(
-            [(2, bar_y), (self.width - 2, bar_y)], fill=self.half_red, width=1
+            [(x_pad, bar_y), (self.width - x_pad, bar_y)],
+            fill=self.half_red,
+            width=sep_w,
         )
 
         # Icons separated from translatable text
@@ -892,18 +929,18 @@ class UIRADecEntry(UIModule):
         back_icon = ""
         go_icon = ""
 
-        # Build more readable instruction lines by grouping logically
-
-        # Line 1 changes based on field selected
         if self._is_dec_field(self.current_field):
             line1 = f"{square_icon}{_('Format')} {arrow_icons}{_('Nav')} +{_('Sign')}"
         elif self.current_field == self.field_count - 1:  # epoch
             line1 = f"{square_icon}{_('Format')} {arrow_icons}{_('Nav')} +{_('Toggle')}"
         else:
             line1 = f"{square_icon}{_('Format')} {arrow_icons}{_('Nav')}"
+
         line2 = f"{back_icon}{_('Cancel')} {go_icon}{_('Go ')} -{_('Del')}"
-        self.draw.text((2, bar_y + 2), line1, font=self.base.font, fill=self.red)
-        self.draw.text((2, bar_y + 12), line2, font=self.base.font, fill=self.red)
+
+        self.draw.text((x_pad, bar_y + y_pad), line1, font=self.base.font, fill=self.red)
+        self.draw.text((x_pad, bar_y + y_pad + self.base.height + self._s(2, min_px=1)), line2, font=self.base.font,
+                       fill=self.red)
 
     def validate_field(self, field_index, value):
         """Validate the entered value for the given field"""

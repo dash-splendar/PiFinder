@@ -100,8 +100,9 @@ class UIConsole(UIModule):
                     [0, 0, self.display_class.resX, self.display_class.titlebar_height],
                     fill=self.colors.get(0),
                 )
+                y_text = max(0, (self.display_class.titlebar_height - self.fonts.base.height) // 2)
                 self.draw.text(
-                    (0, 1),
+                    (0, y_text),
                     self.lines[-1],
                     font=self.fonts.base.font,
                     fill=self.colors.get(255),
@@ -109,15 +110,29 @@ class UIConsole(UIModule):
                 return self.screen_update(title_bar=False)
             else:
                 self.clear_screen()
-                for i, line in enumerate(self.lines[-10 - self.scroll_offset :][:10]):
+
+                # Start drawing just below the title bar with a little padding
+                y0 = self.display_class.titlebar_height + self._s(3, min_px=2)
+
+                # Use actual font height + small spacing (scales naturally with resolution/fonts)
+                line_h = self.fonts.base.height + self._s(2, min_px=1)
+
+                # Compute how many lines fit on screen (instead of a hardcoded 10)
+                max_lines = max(1, (self.display_class.resY - y0) // line_h)
+
+                # Show a scroll window into the most recent lines
+                window = self.lines[-max_lines - self.scroll_offset:][:max_lines]
+
+                for i, line in enumerate(window):
                     self.draw.text(
-                        (0, i * 10 + 20),
+                        (0, y0 + i * line_h),
                         line,
                         font=self.fonts.base.font,
                         fill=self.colors.get(255),
                     )
-                self.dirty = False
-                return self.screen_update()
+
+            self.dirty = False
+            return self.screen_update()
 
     def screen_update(self, title_bar=True, button_hints=True):
         """
@@ -133,7 +148,10 @@ class UIConsole(UIModule):
                 [0, 0, self.display_class.resX, self.display_class.titlebar_height],
                 fill=bg,
             )
-            self.draw.text((6, 1), self.title, font=self.fonts.bold.font, fill=fg)
+            x_pad = self._s(6, min_px=2)
+            y_text = max(0, (self.display_class.titlebar_height - self.fonts.bold.height) // 2)
+            self.draw.text((x_pad, y_text), self.title, font=self.fonts.bold.font, fill=fg)
+
             imu = self.shared_state.imu()
             moving = True if imu and imu["pos"] and imu["moving"] else False
 
@@ -149,8 +167,9 @@ class UIConsole(UIModule):
             _gps_color = self.colors.get(
                 self._gps_brightness if self._gps_brightness > 0 else 0
             )
+            y_icon = max(0, (self.display_class.titlebar_height - self.fonts.icon_bold_large.height) // 2)
             self.draw.text(
-                (self.display_class.resX * 0.8, -2),
+                (int(self.display_class.resX * 0.8), y_icon),
                 self._GPS_ICON,
                 font=self.fonts.icon_bold_large.font,
                 fill=_gps_color,
@@ -171,8 +190,9 @@ class UIConsole(UIModule):
                     # self.draw.rectangle([115, 2, 125, 14], fill=bg)
 
                     if self._unmoved:
+                        y_icon = max(0, (self.display_class.titlebar_height - self.fonts.icon_bold_large.height) // 2)
                         self.draw.text(
-                            (self.display_class.resX * 0.91, -2),
+                            (int(self.display_class.resX * 0.91), y_icon),
                             self._CAM_ICON,
                             font=self.fonts.icon_bold_large.font,
                             fill=var_fg,
@@ -181,16 +201,19 @@ class UIConsole(UIModule):
                     if len(self.title) < 9:
                         # draw the constellation
                         constellation = solution["constellation"]
+                        y_text = max(0, (self.display_class.titlebar_height - self.fonts.bold.height) // 2)
                         self.draw.text(
-                            (self.display_class.resX * 0.54, 1),
+                            (int(self.display_class.resX * 0.54), y_text),
                             constellation,  # Should this be translated or not?
                             font=self.fonts.bold.font,
                             fill=fg if self._unmoved else self.colors.get(32),
                         )
+
                 else:
                     # no solve yet....
+                    y_text = max(0, (self.display_class.titlebar_height - self.fonts.bold.height) // 2)
                     self.draw.text(
-                        (self.display_class.resX * 0.91, 0),
+                        (int(self.display_class.resX * 0.91), y_text),
                         "X",
                         font=self.fonts.bold.font,
                         fill=fg,

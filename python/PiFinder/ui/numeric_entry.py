@@ -31,23 +31,23 @@ class BlinkingCursor:
         if not self.is_visible():
             return
 
-        cursor_width = 2
-        cursor_height = height - 2
+        # Scale cursor thickness/offset with the character cell size (works at 128 and 480+)
+        cursor_width = max(2, int(round(width * 0.18)))
+        cursor_y_offset = max(1, int(round(height * 0.18)))
 
-        # Create a simple blended cursor by drawing with half_red color
-        # Start cursor lower to align with underscore baseline
-        cursor_y_offset = 4
+        # Keep the cursor inside the character cell visually
+        cursor_height = max(1, height - max(2, int(round(height * 0.12))))
+
         for cy in range(cursor_height):
             for cx in range(cursor_width):
                 pixel_x, pixel_y = x + cx, y + cursor_y_offset + cy
                 if 0 <= pixel_x < screen.width and 0 <= pixel_y < screen.height:
-                    # Get current pixel and blend with red
                     current_pixel = screen.getpixel((pixel_x, pixel_y))
                     if isinstance(current_pixel, tuple) and len(current_pixel) >= 3:
                         blended_pixel = (
-                            min(255, (current_pixel[0] + 255) // 2),  # Blend red
-                            current_pixel[1] // 2,  # Dim green
-                            current_pixel[2] // 2,  # Dim blue
+                            min(255, (current_pixel[0] + 255) // 2),
+                            current_pixel[1] // 2,
+                            current_pixel[2] // 2,
                         )
                         screen.putpixel((pixel_x, pixel_y), blended_pixel)
 
@@ -394,7 +394,9 @@ class EntryLegend:
     ):
         """Draw legend in two-line format (like RA/Dec and LM entry)"""
         # Calculate starting Y position for legend
-        bar_y = screen_height - (font_height * 2) - 6
+        pad_y = max(2, int(round(font_height * 0.35)))
+        gap_y = max(1, int(round(font_height * 0.15)))
+        bar_y = screen_height - (font_height * 2) - pad_y
 
         # Draw separator line if requested
         if self.show_separator:
@@ -410,13 +412,13 @@ class EntryLegend:
         line2_items = self.items[mid_point:]
 
         # Draw first line (no space between icon and label, matches radec/lm)
-        y_pos = bar_y + 2
+        y_pos = bar_y + gap_y
         line1_text = " ".join([f"{item.icon}{item.label}" for item in line1_items])
         draw.text((margin, y_pos), line1_text, font=font, fill=text_color)
 
         # Draw second line if there are items
         if line2_items:
-            y_pos += font_height + 2
+            y_pos += font_height + gap_y
             line2_text = " ".join([f"{item.icon}{item.label}" for item in line2_items])
             draw.text((margin, y_pos), line2_text, font=font, fill=text_color)
 
@@ -432,13 +434,17 @@ class EntryLegend:
         margin: int,
     ):
         """Draw legend in single line format"""
-        bar_y = screen_height - font_height - 4
+        pad_y = max(2, int(round(font_height * 0.25)))
+        sep_gap = max(1, int(round(font_height * 0.15)))
+        sep_w = max(1, int(round(font_height * 0.08)))
+
+        bar_y = screen_height - font_height - pad_y
 
         if self.show_separator:
             draw.line(
-                [(margin, bar_y - 2), (screen_width - margin, bar_y - 2)],
+                [(margin, bar_y - sep_gap), (screen_width - margin, bar_y - sep_gap)],
                 fill=separator_color,
-                width=1,
+                width=sep_w,
             )
 
         legend_text = " ".join([f"{item.icon}{item.label}" for item in self.items])
@@ -456,13 +462,17 @@ class EntryLegend:
         margin: int,
     ):
         """Draw legend in compact format with minimal spacing"""
-        bar_y = screen_height - font_height - 2
+        pad_y = max(1, int(round(font_height * 0.15)))
+        sep_gap = max(1, int(round(font_height * 0.10)))
+        sep_w = max(1, int(round(font_height * 0.08)))
+
+        bar_y = screen_height - font_height - pad_y
 
         if self.show_separator:
             draw.line(
-                [(margin, bar_y - 1), (screen_width - margin, bar_y - 1)],
+                [(margin, bar_y - sep_gap), (screen_width - margin, bar_y - sep_gap)],
                 fill=separator_color,
-                width=1,
+                width=sep_w,
             )
 
         legend_text = " ".join([f"{item.icon}{item.label}" for item in self.items])

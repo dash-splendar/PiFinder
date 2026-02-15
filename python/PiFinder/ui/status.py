@@ -133,13 +133,18 @@ class UIStatus(UIModule):
         self.last_temp_time = 0
         self.last_IP_time = 0
         self.net = sys_utils.Network()
+        # Determine how many lines fit in the area below the title bar
+        usable_h = max(0, self.display_class.resY - self.display_class.titlebar_height)
+        available_lines = max(1, int(usable_h // max(1, self.fonts.base.height)))
+
         self.text_layout = TextLayouter(
             "",
             draw=self.draw,
             color=self.colors.get(255),
             colors=self.colors,
             font=self.fonts.base,
-            available_lines=9,
+            available_lines=available_lines,
+            ui_res=min(self.display_class.resolution),
         )
 
     def update_software(self, option):
@@ -306,7 +311,13 @@ class UIStatus(UIModule):
     def update(self, force=False):
         time.sleep(1 / 30)
         self.update_status_dict()
-        self.draw.rectangle([0, 0, 128, 128], fill=self.colors.get(0))
+
+        # Clear full UI canvas (remove 128x128 hardcode)
+        self.draw.rectangle(
+            [0, 0, self.display_class.resX, self.display_class.resY],
+            fill=self.colors.get(0),
+        )
+
         lines = []
         # Insert IP address here...
         for k, v in self.status_dict.items():
@@ -316,6 +327,7 @@ class UIStatus(UIModule):
                 v = v[1]
             _, result = self.spacecalc.calculate_spaces(key, v, empty_if_exceeds=False)
             lines.append(result)
+
         outline = "\n".join(lines)
         self.text_layout.set_text(outline, reset_pointer=False)
         self.text_layout.draw(pos=self._draw_pos)

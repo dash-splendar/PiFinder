@@ -149,13 +149,6 @@ class TextLayouterScroll(TextLayouterSimple):
 class TextLayouter(TextLayouterSimple):
     """To be used as a multi-line text with down scrolling"""
 
-    shorttop = [48, 125, 80, 125]
-    shortbottom = [48, 126, 80, 126]
-    longtop = [32, 125, 96, 125]
-    longbottom = [32, 126, 96, 126]
-    downarrow = (longtop, shortbottom)
-    uparrow = (shorttop, longbottom)
-
     def __init__(
         self,
         text: str,
@@ -164,6 +157,7 @@ class TextLayouter(TextLayouterSimple):
         colors,
         font,
         available_lines=3,
+        ui_res: int = 128,   # <-- NEW: square UI resolution (e.g. 480)
     ):
         super().__init__(text, draw, color, font)
         self.nr_lines = 0
@@ -172,6 +166,22 @@ class TextLayouter(TextLayouterSimple):
         self.available_lines = available_lines
         self.pointer = 0
         self.updated = True
+
+        self.ui_res = int(ui_res)
+        self._scale = self.ui_res / 128.0
+        self.scrollbar_width = max(1, int(round(1 * self._scale)))
+
+        # Arrow geometry (legacy was near bottom of 128x128).
+        # Not currently referenced elsewhere, but keep it correct/res-aware.
+        y1 = max(0, self.ui_res - max(3, int(round(3 * self._scale))))
+        y2 = max(0, self.ui_res - max(2, int(round(2 * self._scale))))
+
+        self.shorttop = [int(0.375 * self.ui_res), y1, int(0.625 * self.ui_res), y1]
+        self.shortbottom = [int(0.375 * self.ui_res), y2, int(0.625 * self.ui_res), y2]
+        self.longtop = [int(0.25 * self.ui_res), y1, int(0.75 * self.ui_res), y1]
+        self.longbottom = [int(0.25 * self.ui_res), y2, int(0.75 * self.ui_res), y2]
+        self.downarrow = (self.longtop, self.shortbottom)
+        self.uparrow = (self.shorttop, self.longbottom)
 
     def next(self, direction=1):
         if self.nr_lines <= self.available_lines:
@@ -195,12 +205,15 @@ class TextLayouter(TextLayouterSimple):
         self.updated = True
 
     def _draw_pos(self, pos):
-        xpos = 127
-        starty = pos[1] + 1
-        endy = 127
-        therange = endy - starty
-        blockextent = math.floor((self.available_lines / self.nr_lines) * therange)
+        # Draw a slim scrollbar on the right edge of the square UI canvas.
+        xpos = self.ui_res - 1
+        starty = pos[1] + max(1, int(round(1 * self._scale)))
+        endy = self.ui_res - 1
+
+        therange = max(1, endy - starty)
+        blockextent = max(1, math.floor((self.available_lines / self.nr_lines) * therange))
         blockstart = ((self.pointer) / self.nr_lines) * therange
+
         start = [xpos, starty, xpos, endy]
         end = [
             xpos,
@@ -208,26 +221,24 @@ class TextLayouter(TextLayouterSimple):
             xpos,
             math.floor(starty + blockstart + blockextent),
         ]
-        self.drawobj.line(start, fill=self.colors.get(64), width=1)
-        self.drawobj.line(end, fill=self.colors.get(128), width=1)
+
+        self.drawobj.line(start, fill=self.colors.get(64), width=self.scrollbar_width)
+        self.drawobj.line(end, fill=self.colors.get(128), width=self.scrollbar_width)
 
     def layout(self, pos: Tuple[int, int] = (0, 0)):
         if self.updated:
             split_lines = re.split(r"\n|\n\n", self.text)
             self.object_text = []
             for line in split_lines:
-                self.object_text.extend(
-                    textwrap.wrap(line, width=self.font.line_length)
-                )
+                self.object_text.extend(textwrap.wrap(line, width=self.font.line_length))
             self.nr_lines = len(self.object_text)
-            self.object_text = self.object_text[
-                self.pointer : self.pointer + self.available_lines
-            ]
+            self.object_text = self.object_text[self.pointer : self.pointer + self.available_lines]
         self.updated = False
 
     def after_draw(self, pos):
         if self.nr_lines > self.available_lines:
             self._draw_pos(pos)
+
 
 
 def shadow_outline_text(

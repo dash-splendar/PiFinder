@@ -142,184 +142,185 @@ class UIGPSStatus(UIModule):
     def update(self, force=False):
         state_utils.sleep_for_framerate(self.shared_state)
         self.clear_screen()
-        draw_pos = self.display_class.titlebar_height + 1
+
         location = self.shared_state.location()
-        sats = self.shared_state.sats()
-        if sats is None:
-            sats = (0, 0)
+        sats = self.shared_state.sats() or (0, 0)
+
+        # Scaled layout helpers
+        x5 = self._s(5, min_px=2)
+        x10 = self._s(10, min_px=4)
+        x15 = self._s(15, min_px=6)
+        x20 = self._s(20, min_px=8)
+        x25 = self._s(25, min_px=10)
+        x35 = self._s(35, min_px=14)
+
+        gap = self._s(2, min_px=1)
+        step_base = self.fonts.base.height + gap
+        step_bold = self.fonts.bold.height + gap
+        step_large = self.fonts.large.height + gap
+
+        draw_pos = self.display_class.titlebar_height + self._s(3, min_px=2)
 
         # Status message
         if location.lock_type and location.lock_type > 1:
             self.draw.text(
-                (20, draw_pos),
+                (x20, draw_pos),
                 _("GPS Locked"),
                 font=self.fonts.large.font,
                 fill=self.colors.get(255),
             )
         else:
             self.draw.text(
-                (5, draw_pos),
+                (x5, draw_pos),
                 _("Lock boost on"),
                 font=self.fonts.large.font,
                 fill=self.colors.get(255),
             )
-        draw_pos += 16
+
+        draw_pos += step_large + self._s(2, min_px=1)
+
         if self.display_mode == "large":
             if location.lock_type and location.lock_type > 1:
                 self.draw.text(
-                    (25, draw_pos),
+                    (x25, draw_pos),
                     _("You are ready"),  # TRANSLATORS: GPS Locked message Part 1/2
                     font=self.fonts.base.font,
                     fill=self.colors.get(192),
                 )
-                draw_pos += 10
+                draw_pos += step_base
                 self.draw.text(
-                    (35, draw_pos),
+                    (x35, draw_pos),
                     _("to observe!"),  # TRANSLATORS: GPS Locked message Part 2/2
                     font=self.fonts.base.font,
                     fill=self.colors.get(192),
                 )
-                draw_pos += 15
+                draw_pos += step_base + self._s(4, min_px=2)
             else:
                 self.draw.text(
-                    (5, draw_pos),
-                    _(
-                        "Stay on this screen"
-                    ),  # TRANSLATORS: GPS Not locked message Part 1/2
+                    (x5, draw_pos),
+                    _("Stay on this screen"),  # TRANSLATORS: GPS Not locked message Part 1/2
                     font=self.fonts.base.font,
                     fill=self.colors.get(192),
                 )
-                draw_pos += 10
+                draw_pos += step_base
                 self.draw.text(
-                    (10, draw_pos),
-                    _(
-                        "for quicker lock"
-                    ),  # TRANSLATORS: GPS Not locked message Part 2/2
+                    (x10, draw_pos),
+                    _("for quicker lock"),  # TRANSLATORS: GPS Not locked message Part 2/2
                     font=self.fonts.base.font,
                     fill=self.colors.get(192),
                 )
-                draw_pos += 15
+                draw_pos += step_base + self._s(4, min_px=2)
 
             # Lock status
             self.draw.text(
-                (10, draw_pos),
+                (x10, draw_pos),
                 _("Lock Type:"),  # TRANSLATORS: GPS Lock type
                 font=self.fonts.bold.font,
                 fill=self.colors.get(128),
             )
-            draw_pos += 10
+            draw_pos += step_bold
             self.draw.text(
-                (10, draw_pos),
-                _("None")
-                if not location.lock
-                else _(
-                    self._lock_type_dict[location.lock_type]
-                ),  # TRANSLATORS: GPS Lock Type
+                (x10, draw_pos),
+                _("None") if not location.lock else _(self._lock_type_dict[location.lock_type]),
                 font=self.fonts.large.font,
                 fill=self.colors.get(255),
             )
-            draw_pos += 18
+            draw_pos += step_large + self._s(4, min_px=2)
 
             # Satellite info
             self.draw.text(
-                (10, draw_pos),
+                (x10, draw_pos),
                 _("Sats seen/used:"),
                 font=self.fonts.bold.font,
                 fill=self.colors.get(128),
             )
-            draw_pos += 10
-
-            # Satellite info
+            draw_pos += step_bold
             self.draw.text(
-                (10, draw_pos),
+                (x10, draw_pos),
                 f"{sats[0]}/{sats[1]}",
                 font=self.fonts.large.font,
                 fill=self.colors.get(192),
             )
 
+            # Bottom hint
+            y_hint = self.display_class.resY - self.fonts.base.height - self._s(2, min_px=1)
             self.draw.text(
-                (15, self.display_class.resY - self.fonts.base.height - 2),
+                (x15, y_hint),
                 _("{square} Toggle Details").format(square=self._SQUARE_),
                 font=self.fonts.base.font,
                 fill=self.colors.get(255),
             )
 
         if self.display_mode == "detailed":
-            # Satellite info
+            x0 = self._s(0, min_px=0)
+
             self.draw.text(
-                (0, draw_pos),
+                (x0, draw_pos),
                 _("Sats seen/used: {sats_seen}/{sats_used}").format(
                     sats_seen=sats[0], sats_used=sats[1]
                 ),
                 font=self.fonts.base.font,
                 fill=self.colors.get(128),
             )
-            draw_pos += 10
+            draw_pos += step_base
 
-            # Error display
             self.draw.text(
-                (0, draw_pos),
-                _("Error: {error}").format(
-                    error=self._get_error_string(location.error_in_m)
-                ),  # TRANSLATORS: GPS uncertainty
+                (x0, draw_pos),
+                _("Error: {error}").format(error=self._get_error_string(location.error_in_m)),
                 font=self.fonts.base.font,
                 fill=self.colors.get(128),
             )
-            draw_pos += 10
+            draw_pos += step_base
 
-            # Lock status
             self.draw.text(
-                (0, draw_pos),
+                (x0, draw_pos),
                 _("Lock:  {locktype}").format(
-                    locktype=_("No")
-                    if not location.lock
-                    else _(self._lock_type_dict[location.lock_type])
+                    locktype=_("No") if not location.lock else _(self._lock_type_dict[location.lock_type])
                 ),
                 font=self.fonts.base.font,
                 fill=self.colors.get(255),
             )
-            draw_pos += 10
+            draw_pos += step_base
 
-            # Position data if locked
             self.draw.text(
-                (0, draw_pos),
+                (x0, draw_pos),
                 _("Lat:   {latitude:.5f}").format(latitude=location.lat),
                 font=self.fonts.base.font,
                 fill=self.colors.get(128),
             )
-            draw_pos += 10
+            draw_pos += step_base
 
             self.draw.text(
-                (0, draw_pos),
+                (x0, draw_pos),
                 _("Lon:   {longitude:.5f}").format(longitude=location.lon),
                 font=self.fonts.base.font,
                 fill=self.colors.get(128),
             )
-            draw_pos += 10
+            draw_pos += step_base
 
             self.draw.text(
-                (0, draw_pos),
+                (x0, draw_pos),
                 _("Alt:   {altitude:.1f} m").format(altitude=location.altitude),
                 font=self.fonts.base.font,
                 fill=self.colors.get(128),
             )
-            draw_pos += 10
+            draw_pos += step_base
 
             time = self.shared_state.local_datetime()
             self.draw.text(
-                (0, draw_pos),
-                _("Time:  {time}").format(
-                    time=time.strftime("%H:%M:%S") if time else "---"
-                ),
+                (x0, draw_pos),
+                _("Time:  {time}").format(time=time.strftime("%H:%M:%S") if time else "---"),
                 font=self.fonts.base.font,
                 fill=self.colors.get(128),
             )
-            draw_pos += 10
+            draw_pos += step_base
+
             self.draw.text(
-                (0, draw_pos),
+                (x0, draw_pos),
                 _("From:  {location_source}").format(location_source=location.source),
                 font=self.fonts.base.font,
                 fill=self.colors.get(128),
             )
-            draw_pos += 10
+
         return self.screen_update()
+

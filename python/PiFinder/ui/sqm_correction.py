@@ -80,41 +80,55 @@ class UISQMCorrection(UIModule):
         self.message_time = None
 
     def update(self, force=False):
-        """Draw the correction UI"""
+        """Draw the correction UI (resolution-aware)"""
         self.clear_screen()
+
+        # Layout helpers
+        x0 = 0
+        x_pad = self._s(6, min_px=2)
+        gap = self._s(2, min_px=1)
+        block_gap = self._s(6, min_px=2)
+
+        # Start below title bar instead of hardcoded y=5/25/45
+        y = self.display_class.titlebar_height + self._s(3, min_px=2)
 
         # Title
         title = _("SQM Correction")
         self.draw.text(
-            (0, 5),
+            (x0, y),
             title,
             font=self.fonts.bold.font,
             fill=self.colors.get(255),
         )
+        y += self.fonts.bold.height + block_gap
 
         # Show original SQM value
         original_text = _("Original: {sqm:.2f}").format(sqm=self.original_sqm)
         self.draw.text(
-            (0, 25),
+            (x0, y),
             original_text,
             font=self.fonts.base.font,
             fill=self.colors.get(128),
         )
+        y += self.fonts.base.height + block_gap
 
         # Show correction input label
         corrected_label = _("Corrected:")
         self.draw.text(
-            (0, 45),
+            (x0, y),
             corrected_label,
             font=self.fonts.base.font,
             fill=self.colors.get(192),
         )
+        y += self.fonts.base.height + gap
 
-        # Calculate centered position for entry field
-        entry_y = 60
+        # Center the entry field using current UI width (remove hardcoded 128)
         char_width = self.fonts.large.width
         total_width = char_width * len(self.entry_field.positions)
-        entry_x = (128 - total_width) // 2
+
+        entry_x = max(0, (self.display_class.resX - total_width) // 2)
+
+        entry_y = y + self._s(6, min_px=2)
 
         # Draw numeric entry field using component with blinking cursor
         self.entry_field.draw(
@@ -129,13 +143,14 @@ class UISQMCorrection(UIModule):
             blinking_cursor=self.cursor,
         )
 
-        # Show error or success message
-        message_y = 85
+        # Message line below entry (but above legend)
+        message_y = entry_y + self.fonts.large.height + self._s(6, min_px=2)
+
         if self.error_message and self.message_time:
             # Show error for 3 seconds
             if (datetime.now() - self.message_time).total_seconds() < 3:
                 self.draw.text(
-                    (0, message_y),
+                    (x0, message_y),
                     self.error_message,
                     font=self.fonts.base.font,
                     fill=self.colors.get(255),
@@ -148,7 +163,7 @@ class UISQMCorrection(UIModule):
             # Show success for 3 seconds, then exit
             if (datetime.now() - self.message_time).total_seconds() < 3:
                 self.draw.text(
-                    (0, message_y),
+                    (x0, message_y),
                     self.success_message,
                     font=self.fonts.base.font,
                     fill=self.colors.get(255),
@@ -158,16 +173,16 @@ class UISQMCorrection(UIModule):
                 if self.remove_from_stack:
                     self.remove_from_stack()
 
-        # Draw legend at bottom using component
+        # Draw legend at bottom using component (remove hardcoded 128)
         self.legend.draw(
             draw=self.draw,
-            screen_width=128,
-            screen_height=128,
+            screen_width=self.display_class.resX,
+            screen_height=self.display_class.resY,
             font=self.fonts.base.font,
             font_height=self.fonts.base.height,
             separator_color=self.colors.get(128),
             text_color=self.colors.get(128),
-            margin=2,
+            margin=self._s(2, min_px=1),
         )
 
         return self.screen_update()

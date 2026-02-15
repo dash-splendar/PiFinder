@@ -95,55 +95,67 @@ class UISoftware(UIModule):
     def update(self, force=False):
         time.sleep(1 / 30)
         self.clear_screen()
-        draw_pos = self.display_class.titlebar_height + 2
+
+        x0 = 0
+        x_left = self._s(10, min_px=4)
+        gap = self._s(2, min_px=1)
+        block_gap = self._s(6, min_px=2)
+
+        draw_pos = self.display_class.titlebar_height + self._s(2, min_px=1)
+
         self.draw.text(
-            (0, draw_pos),
+            (x0, draw_pos),
             _("Wifi Mode: {}").format(self._wifi_mode),
             font=self.fonts.base.font,
             fill=self.colors.get(128),
         )
-        draw_pos += 15
+        draw_pos += self.fonts.base.height + block_gap
 
         self.draw.text(
-            (0, draw_pos),
+            (x0, draw_pos),
             _("Current Version"),
             font=self.fonts.bold.font,
             fill=self.colors.get(128),
         )
-        draw_pos += 10
+        draw_pos += self.fonts.bold.height + gap
 
         self.draw.text(
-            (10, draw_pos),
+            (x_left, draw_pos),
             f"{self._software_version}",
             font=self.fonts.bold.font,
             fill=self.colors.get(192),
         )
-        draw_pos += 16
+        draw_pos += self.fonts.bold.height + block_gap
 
         self.draw.text(
-            (0, draw_pos),
+            (x0, draw_pos),
             _("Release Version"),
             font=self.fonts.bold.font,
             fill=self.colors.get(128),
         )
-        draw_pos += 10
+        draw_pos += self.fonts.bold.height + gap
 
         self.draw.text(
-            (10, draw_pos),
+            (x_left, draw_pos),
             f"{self._release_version}",
             font=self.fonts.bold.font,
             fill=self.colors.get(192),
         )
 
+        # Lower status area (legacy y=90/105 on 128px -> lower half of screen)
+        usable_h = self.display_class.resY - self.display_class.titlebar_height
+        y1 = self.display_class.titlebar_height + int(usable_h * 0.62)
+        y2 = y1 + self.fonts.large.height + self._s(6, min_px=2)
+
         if self._wifi_mode != "Client":
             self.draw.text(
-                (10, 90),
+                (x_left, y1),
                 _("WiFi must be"),
                 font=self.fonts.large.font,
                 fill=self.colors.get(255),
             )
             self.draw.text(
-                (10, 105),
+                (x_left, y2),
                 _("client mode"),
                 font=self.fonts.large.font,
                 fill=self.colors.get(255),
@@ -156,19 +168,20 @@ class UISoftware(UIModule):
             if self._elipsis_count > 30:
                 self.get_release_version()
             self.draw.text(
-                (10, 90),
+                (x_left, y1),
                 _("Checking for"),
                 font=self.fonts.large.font,
                 fill=self.colors.get(255),
             )
             self.draw.text(
-                (10, 105),
+                (x_left, y2),
                 _("updates{elipsis}").format(
                     elipsis="." * int(self._elipsis_count / 10)
                 ),
                 font=self.fonts.large.font,
                 fill=self.colors.get(255),
             )
+
             self._elipsis_count += 1
             if self._elipsis_count > 39:
                 self._elipsis_count = 0
@@ -178,39 +191,38 @@ class UISoftware(UIModule):
             self._software_version.strip(), self._release_version.strip()
         ):
             self.draw.text(
-                (10, 90),
+                (x_left, y1),
                 _("No Update"),
                 font=self.fonts.large.font,
                 fill=self.colors.get(255),
             )
             self.draw.text(
-                (10, 105),
+                (x_left, y2),
                 _("needed"),
                 font=self.fonts.large.font,
                 fill=self.colors.get(255),
             )
+
             return self.screen_update()
 
         # If we are here, go for update!
         self._go_for_update = True
         self.draw.text(
-            (10, 90),
+            (x_left, y1),
             _("Update Now"),
             font=self.fonts.large.font,
             fill=self.colors.get(255),
         )
         self.draw.text(
-            (10, 105),
+            (x_left, y2),
             _("Cancel"),
             font=self.fonts.large.font,
             fill=self.colors.get(255),
         )
-        if self._option_select == "Update":
-            ind_pos = 90
-        else:
-            ind_pos = 105
+
+        ind_pos = y1 if self._option_select == "Update" else y2
         self.draw.text(
-            (0, ind_pos),
+            (x0, ind_pos),
             self._RIGHT_ARROW,
             font=self.fonts.large.font,
             fill=self.colors.get(255),

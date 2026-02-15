@@ -18,22 +18,21 @@ class UITimeEntry(UIModule):
         ]  # TRANSLATORS: Place holders for hours, minutes, seconds in time entry
 
         # Screen setup
-        self.width = 128
-        self.height = 128
+        # Screen setup (use the UIModule-provided surface; no private 128x128 buffer)
+        self.width = self.display_class.resX
+        self.height = self.display_class.resY
         self.red = self.colors.get(255)
         self.black = self.colors.get(0)
         self.half_red = self.colors.get(128)
-        self.screen = Image.new("RGB", (self.width, self.height), "black")
-        self.draw = ImageDraw.Draw(self.screen)
         self.bold = self.fonts.bold
 
-        # Layout constants - updated to center the boxes
-        self.text_y = 25
-        self.box_width = 25
-        self.box_height = 20
-        self.box_spacing = 15
+        # Layout constants (scale legacy 128px tuning)
+        self.text_y = self.display_class.titlebar_height + self._s(8, min_px=3)
+        self.box_width = self._s(25, min_px=18)
+        self.box_height = max(self._s(20, min_px=12), self.fonts.large.height + self._s(4, min_px=2))
+        self.box_spacing = self._s(15, min_px=6)
 
-        # Calculate start_x to center the boxes on screen
+        # Calculate start_x to center the boxes on current UI width
         total_width = (3 * self.box_width) + (2 * self.box_spacing)
         self.start_x = (self.width - total_width) // 2
 
@@ -44,7 +43,7 @@ class UITimeEntry(UIModule):
 
             # Draw box outline - highlight current box with a brighter outline
             outline_color = self.red if i == self.current_box else self.half_red
-            outline_width = 2 if i == self.current_box else 1
+            outline_width = max(1, self._s(2, min_px=1)) if i == self.current_box else max(1, self._s(1, min_px=1))
 
             self.draw.rectangle(
                 [x, self.text_y, x + self.box_width, self.text_y + self.box_height],
@@ -78,56 +77,68 @@ class UITimeEntry(UIModule):
         # Draw cursor in current box if empty
         if not self.boxes[self.current_box]:
             x = self.start_x + self.current_box * (self.box_width + self.box_spacing)
-            cursor_x = x + 2
+            cursor_x = x + self._s(2, min_px=1)
             self.draw.rectangle(
                 [
                     cursor_x,
-                    self.text_y + 2,
-                    cursor_x + 8,
-                    self.text_y + self.box_height - 2,
+                    self.text_y + self._s(2, min_px=1),
+                    cursor_x + self._s(8, min_px=3),
+                    self.text_y + self.box_height - self._s(2, min_px=1),
                 ],
                 fill=self.red,
             )
 
     def draw_local_time_note(self):
-        # Add a note about local time
-        note_y = self.text_y + self.box_height + 10
+        # Add a note about local time (resolution-aware)
+        x = self._s(10, min_px=4)
+        gap = self._s(6, min_px=2)
+        note_y = self.text_y + self.box_height + gap
+
         self.draw.text(
-            (10, note_y),
+            (x, note_y),
             _("Enter Local Time"),
             font=self.fonts.base.font,
             fill=self.red,  # Brighter color for better visibility
         )
-        return note_y + 15  # Return the Y position after this element
+
+        return note_y + self.fonts.base.height + self._s(3, min_px=1)
 
     def draw_separator(self, start_y):
-        # Draw a separator line before the legend
+        # Draw a separator line before the legend (resolution-aware)
+        x = self._s(10, min_px=4)
         self.draw.line(
-            [(10, start_y), (self.width - 10, start_y)], fill=self.half_red, width=1
+            [(x, start_y), (self.width - x, start_y)],
+            fill=self.half_red,
+            width=max(1, self._s(1, min_px=1)),
         )
-        return start_y + 5  # Return the Y position after the separator
+        return start_y + self._s(5, min_px=2)
 
     def draw_legend(self, start_y):
+        x = self._s(10, min_px=4)
         legend_y = start_y
+
         # Still using full red for better visibility but smaller font
         legend_color = self.red
+        line_gap = self._s(2, min_px=1)
 
         self.draw.text(
-            (10, legend_y),
+            (x, legend_y),
             _("  Next box"),  # Right
-            font=self.fonts.base.font,  # Using base font
+            font=self.fonts.base.font,
             fill=legend_color,
         )
-        legend_y += 12  # Standard spacing
+        legend_y += self.fonts.base.height + line_gap
+
         self.draw.text(
-            (10, legend_y),
+            (x, legend_y),
             _("  Done"),  # Left
             font=self.fonts.base.font,
             fill=legend_color,
         )
-        legend_y += 12  # Standard spacing
+        legend_y += self.fonts.base.height + line_gap
+
         self.draw.text(
-            (10, legend_y),
+            (x, legend_y),
             _("󰍴  Delete/Previous"),  # minus
             font=self.fonts.base.font,
             fill=legend_color,
@@ -182,7 +193,7 @@ class UITimeEntry(UIModule):
             self.custom_callback(self, time_str)
 
     def update(self, force=False):
-        self.draw.rectangle((0, 0, 128, 128), fill=self.black)
+        self.draw.rectangle((0, 0, self.display_class.resX, self.display_class.resY), fill=self.black)
 
         # Draw title
         # self.draw.text(
@@ -196,7 +207,8 @@ class UITimeEntry(UIModule):
 
         # Draw additional elements with proper positioning
         note_y = self.draw_local_time_note()
-        separator_y = self.draw_separator(note_y + 15)
+        separator_y = self.draw_separator(note_y + self._s(6, min_px=2))
+
         self.draw_legend(separator_y)
 
         if self.shared_state:

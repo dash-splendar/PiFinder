@@ -131,12 +131,15 @@ class UILog(UIModule):
         self.reset_config()
 
     def draw_stars(self, horiz_pos, star_count):
+        x0 = self._s(20, min_px=8)
+        x_step = self._s(15, min_px=max(8, self.fonts.large.width + self._s(2, min_px=1)))
+
         for i in range(5):
             star_color = 64
             if star_count > i:
                 star_color = 255
             self.draw.text(
-                (i * 15 + 20, horiz_pos),
+                (x0 + i * x_step, horiz_pos),
                 self._STAR,
                 font=self.fonts.large.font,
                 fill=self.colors.get(star_color),
@@ -169,65 +172,74 @@ class UILog(UIModule):
         )
 
         if not self.shared_state.solve_state():
+            y = self.display_class.titlebar_height + self._s(6, min_px=3)
             self.draw.text(
-                (0, 20),
+                (0, y),
                 _("No Solve Yet"),
                 font=self.fonts.large.font,
                 fill=self.colors.get(255),
             )
             return self.screen_update()
 
-        horiz_pos = self.display_class.titlebar_height
+        x_left = self._s(10, min_px=4)
+        gap = self._s(3, min_px=2)
 
-        # Target Name
+        # Start just below the titlebar
+        horiz_pos = self.display_class.titlebar_height + gap
+
+        # SAVE Log
         self.draw.text(
-            (10, horiz_pos),
+            (x_left, horiz_pos),
             _("SAVE Log"),
             font=self.fonts.large.font,
             fill=self.colors.get(255),
         )
         if self.menu_index == 0:
             self.draw_menu_pointer(horiz_pos)
-        horiz_pos += 18
+        horiz_pos += self.fonts.large.height + self._s(6, min_px=2)
 
         # Observability
         self.draw.text(
-            (10, horiz_pos),
+            (x_left, horiz_pos),
             _("Observability"),
             font=self.fonts.large.font,
             fill=self.colors.get(192),
         )
         if self.menu_index == 1:
             self.draw_menu_pointer(horiz_pos)
-        horiz_pos += 14
+        horiz_pos += self.fonts.large.height + self._s(2, min_px=1)
+
         self.draw_stars(horiz_pos, self.log_observability)
-        horiz_pos += 11
+        horiz_pos += self.fonts.large.height + self._s(8, min_px=3)
 
         # Appeal
         self.draw.text(
-            (10, horiz_pos),
+            (x_left, horiz_pos),
             _("Appeal"),
             font=self.fonts.large.font,
             fill=self.colors.get(192),
         )
         if self.menu_index == 2:
             self.draw_menu_pointer(horiz_pos)
-        horiz_pos += 14
-        self.draw_stars(horiz_pos, self.log_appeal)
-        horiz_pos += 15
+        horiz_pos += self.fonts.large.height + self._s(2, min_px=1)
 
+        self.draw_stars(horiz_pos, self.log_appeal)
+        horiz_pos += self.fonts.large.height + self._s(10, min_px=4)
+
+        # Conditions
         self.draw.text(
-            (10, horiz_pos),
+            (x_left, horiz_pos),
             _("Conditions..."),
             font=self.fonts.large.font,
             fill=self.colors.get(192),
         )
         if self.menu_index == 3:
             self.draw_menu_pointer(horiz_pos)
-        horiz_pos += 17
+        horiz_pos += self.fonts.large.height + self._s(6, min_px=2)
 
+        # Eyepiece
         self.draw.text(
-            (10, horiz_pos),
+            (x_left, horiz_pos),
             _("Eyepiece..."),
             font=self.fonts.large.font,
             fill=self.colors.get(192),
@@ -239,7 +251,7 @@ class UILog(UIModule):
 
     def draw_menu_pointer(self, horiz_position: int):
         self.draw.text(
-            (2, horiz_position),
+            (self._s(2, min_px=1), horiz_position),
             self._RIGHT_ARROW,
             font=self.fonts.large.font,
             fill=self.colors.get(255),
