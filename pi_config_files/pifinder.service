@@ -6,7 +6,11 @@ After=basic.target
 Type=idle
 User=pifinder
 WorkingDirectory=/home/pifinder/PiFinder/python
-ExecStart=/usr/bin/python -m PiFinder.main --keyboard touch --display hyperpixel4_native --imu usb
+
+Environment="VIRTUAL_ENV=/home/pifinder/PiFinder/python/.venv"
+Environment="PATH=/home/pifinder/PiFinder/python/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+ExecStart=/home/pifinder/PiFinder/python/.venv/bin/python -m PiFinder.main --keyboard touch --display hyperpixel4_native --imu usb
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 
 [Install]

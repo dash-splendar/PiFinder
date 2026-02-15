@@ -2,8 +2,13 @@
 Description=PiFinderSplash
 
 [Service]
+User=pifinder
 WorkingDirectory=/home/pifinder/PiFinder/python
-ExecStart=/usr/bin/python -m PiFinder.splash
+
+Environment="VIRTUAL_ENV=/home/pifinder/PiFinder/python/.venv"
+Environment="PATH=/home/pifinder/PiFinder/python/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+ExecStart=/home/pifinder/PiFinder/python/.venv/bin/python -m PiFinder.splash
 
 [Install]
 WantedBy=basic.target
