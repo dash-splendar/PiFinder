@@ -67,13 +67,41 @@ fi
 sudo systemctl disable ModemManager
 
 # Enable service
+# Optional: install services but DO NOT enable autostart
 sudo cp /home/pifinder/PiFinder/pi_config_files/pifinder.service /lib/systemd/system/pifinder.service
 sudo cp /home/pifinder/PiFinder/pi_config_files/pifinder_splash.service /lib/systemd/system/pifinder_splash.service
 sudo cp /home/pifinder/PiFinder/pi_config_files/cedar_detect.service /lib/systemd/system/cedar_detect.service
 sudo systemctl daemon-reload
+
+# Do not auto-start these on boot (desktop systems launch manually)
+sudo systemctl disable --now pifinder || true
+sudo systemctl disable --now pifinder_splash || true
 sudo systemctl enable cedar_detect
-sudo systemctl enable pifinder
-sudo systemctl enable pifinder_splash
+
+
+
+# Create a desktop launcher for PiFinder (for Desktop Environment)
+DESKTOP_DIR="${HOME}/Desktop"
+APPS_DIR="${HOME}/.local/share/applications"
+ICON_PATH="/home/pifinder/PiFinder/python/PiFinder/ui/assets/icon.png"  # adjust if you have a better icon
+
+mkdir -p "${APPS_DIR}"
+mkdir -p "${DESKTOP_DIR}"
+
+cat > "${APPS_DIR}/PiFinder.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=PiFinder
+Comment=Launch PiFinder
+Exec=bash -c 'cd /home/pifinder/PiFinder/python && python3 -m PiFinder.main --display hyperpixel4_native -k touch --imu usb'
+Terminal=false
+Categories=Education;Science;
+EOF
+
+chmod +x "${APPS_DIR}/PiFinder.desktop"
+cp -f "${APPS_DIR}/PiFinder.desktop" "${DESKTOP_DIR}/PiFinder.desktop"
+chmod +x "${DESKTOP_DIR}/PiFinder.desktop"
+
 
 echo "PiFinder setup complete, please restart the Pi"
 
