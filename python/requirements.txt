@@ -24,5 +24,5 @@ sh==1.14.3
 skyfield==1.45
 timezonefinder==6.1.9
 tqdm==4.65.0
-protobuf==4.25.2
 aiofiles==24.1.0
+protobuf>=5.26.1
