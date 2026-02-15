@@ -11,6 +11,9 @@ from PiFinder.ui.base import UIModule
 from PiFinder import calc_utils
 from PiFinder import utils
 from PiFinder.ui.ui_utils import TextLayouter, SpaceCalculatorFixed
+from PiFinder.ui.fonts import Font
+from pathlib import Path
+
 
 sys_utils = utils.get_sys_utils()
 
@@ -81,6 +84,25 @@ class UIStatus(UIModule):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # --- Create smaller font ONLY for Status screen ---
+        STATUS_FONT_SCALE = 0.88  # try 0.85–0.90 if needed
+
+        # Reconstruct path to the bold font file
+        font_dir = Path(self.fonts.base.font.path).parent
+        bold_path = font_dir / "RobotoMonoNerdFontMono-Bold.ttf"
+
+        # Estimate original size from height
+        # (height ≈ size for this mono font)
+        approx_base_size = self.fonts.base.height
+
+        status_size = max(8, int(approx_base_size * STATUS_FONT_SCALE))
+
+        self.status_font = Font(
+            str(bold_path),
+            status_size,
+            self.display_class.resX,
+        )
+
         self.version_txt = f"{utils.pifinder_dir}/version.txt"
         self.wifi_txt = f"{utils.pifinder_dir}/wifi_status.txt"
         self._draw_pos = (0, self.display_class.titlebar_height)
@@ -88,7 +110,7 @@ class UIStatus(UIModule):
             self._config_options["WiFi Mode"]["value"] = wfs.read()
         with open(self.version_txt, "r") as ver:
             self._config_options["Software"]["value"] = ver.read()
-        self.spacecalc = SpaceCalculatorFixed(self.fonts.base.line_length)
+        self.spacecalc = SpaceCalculatorFixed(self.status_font.line_length)
         self.status_dict = {
             "LST SLV": "--",
             "RA/DEC": "--",
@@ -135,14 +157,14 @@ class UIStatus(UIModule):
         self.net = sys_utils.Network()
         # Determine how many lines fit in the area below the title bar
         usable_h = max(0, self.display_class.resY - self.display_class.titlebar_height)
-        available_lines = max(1, int(usable_h // max(1, self.fonts.base.height)))
+        available_lines = max(1, int(usable_h // max(1, self.status_font.height)))
 
         self.text_layout = TextLayouter(
             "",
             draw=self.draw,
             color=self.colors.get(255),
             colors=self.colors,
-            font=self.fonts.base,
+            font=self.status_font,
             available_lines=available_lines,
             ui_res=min(self.display_class.resolution),
         )

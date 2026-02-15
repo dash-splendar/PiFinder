@@ -15,6 +15,29 @@ else
 fi
 
 
+
+# -----------------------------
+# Create & use Python venv
+# -----------------------------
+cd ~/PiFinder/python
+
+# Create virtual environment if it doesn't already exist
+if [[ ! -d ".venv" ]]; then
+    python3 -m venv .venv
+fi
+
+# Activate the virtual environment
+source .venv/bin/activate
+
+# Upgrade pip inside the venv
+pip install --upgrade pip
+
+# Install requirements inside venv
+pip install -r requirements.txt
+
+# Deactivate when done
+deactivate
+
 # -----------------------------
 # Create X session for PiFinder
 # -----------------------------
@@ -44,27 +67,7 @@ sudo chown pifinder:pifinder $XINITRC
 sudo chmod 755 $XINITRC
 
 
-# -----------------------------
-# Create & use Python venv
-# -----------------------------
-cd ~/PiFinder/python
 
-# Create virtual environment if it doesn't already exist
-if [[ ! -d ".venv" ]]; then
-    python3 -m venv .venv
-fi
-
-# Activate the virtual environment
-source .venv/bin/activate
-
-# Upgrade pip inside the venv
-pip install --upgrade pip
-
-# Install requirements inside venv
-pip install -r requirements.txt
-
-# Deactivate when done
-deactivate
 
 # Setup GPSD
 sudo dpkg-reconfigure -plow gpsd
