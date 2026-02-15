@@ -35,6 +35,7 @@ export SDL_VIDEODRIVER=x11
 xset s off
 xset -dpms
 xset s noblank
+xrandr --output DPI-1 --rotate left
 
 exec python -m PiFinder.main --keyboard touch --display hyperpixel4_native --imu usb
 EOF
