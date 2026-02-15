@@ -13,7 +13,28 @@ if [[ -d PiFinder/ ]]; then
 else
     git clone --recursive --branch release https://github.com/dash-splendar/PiFinder.git
 fi
-cd ~/PiFinder/ && sudo pip install -r python/requirements.txt
+
+# -----------------------------
+# Create & use Python venv
+# -----------------------------
+cd ~/PiFinder/python
+
+# Create virtual environment if it doesn't already exist
+if [[ ! -d ".venv" ]]; then
+    python3 -m venv .venv
+fi
+
+# Activate the virtual environment
+source .venv/bin/activate
+
+# Upgrade pip inside the venv
+pip install --upgrade pip
+
+# Install requirements inside venv
+pip install -r requirements.txt
+
+# Deactivate when done
+deactivate
 
 # Setup GPSD
 sudo dpkg-reconfigure -plow gpsd
