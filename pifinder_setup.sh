@@ -11,7 +11,7 @@ sudo apt-get install -y git python3-pip samba samba-common-bin dnsmasq hostapd d
 if [[ -d PiFinder/ ]]; then
     cd PiFinder/ && git config pull.rebase false && git pull
 else
-    git clone --recursive --branch release https://github.com/brickbots/PiFinder.git
+    git clone --recursive --branch release https://github.com/dash-splendar/PiFinder.git
 fi
 cd ~/PiFinder/ && sudo pip install -r python/requirements.txt
 
