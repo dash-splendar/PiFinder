@@ -1,8 +1,43 @@
 # Fonts class which, in its init, declares all kind of fonts which are
 # used in the UI
 
+from __future__ import annotations
+
 from pathlib import Path
 from PIL import ImageFont
+
+
+def _find_repo_fonts_dir() -> Path:
+    """
+    Find the PiFinder 'fonts' directory regardless of current working dir.
+
+    We search upward from this file for a sibling 'fonts' directory that contains
+    the expected RobotoMono Nerd Font files.
+    """
+    here = Path(__file__).resolve()
+
+    candidates = [
+        here.parent.parent / "fonts",                 # .../PiFinder/fonts (if bundled in package)
+        here.parent.parent.parent / "fonts",          # .../python/fonts
+        here.parent.parent.parent.parent / "fonts",   # repo root /fonts
+    ]
+
+    required = {
+        "RobotoMonoNerdFontMono-Bold.ttf",
+        "RobotoMonoNerdFontMono-Regular.ttf",
+    }
+
+    for c in candidates:
+        try:
+            if c.is_dir():
+                present = {p.name for p in c.iterdir() if p.is_file()}
+                if required.issubset(present):
+                    return c
+        except OSError:
+            pass
+
+    # If not found, return first candidate so error shows resolved path clearly
+    return candidates[0]
 
 
 class Font:
@@ -20,21 +55,27 @@ class Font:
         height: int = 0,
         width: int = 0,
     ):
+        p = Path(ttf_file)
+
+        if not p.exists():
+            raise FileNotFoundError(
+                f"Font file not found: {p} (resolved from '{ttf_file}')"
+            )
+
         self.font = ImageFont.truetype(
-            ttf_file, size, layout_engine=ImageFont.Layout.BASIC
+            str(p), size, layout_engine=ImageFont.Layout.BASIC
         )
 
-        # calculate height/width
-        # getbbox returns (x0, y0, x1, y1) so height/width must be (x1-x0)/(y1-y0)
-        # Use several chars to average out glyph spacing.
+        # Calculate height/width
+        # getbbox returns (x0, y0, x1, y1)
         bbox = self.font.getbbox("MMMMMMMMMM")
-        calc_h = (bbox[3] - bbox[1])
+        calc_h = bbox[3] - bbox[1]
         calc_w = int(round((bbox[2] - bbox[0]) / 10.0))
 
         self.height = calc_h if height == 0 else height
         self.width = calc_w if width == 0 else width
 
-        # Defensive clamp: avoid 0 if width > screen_width
+        # Avoid divide-by-zero or zero-length lines
         self.line_length = max(1, int(screen_width / max(1, self.width)))
 
 
@@ -48,15 +89,18 @@ class Fonts:
         huge_size=35,
         screen_width=128,
     ):
-        # Resolve fonts directory relative to this file, not current working directory
-        font_path = Path(__file__).resolve().parent.parent / "fonts"
-        boldttf = str(font_path / "RobotoMonoNerdFontMono-Bold.ttf")
-        regularttf = str(font_path / "RobotoMonoNerdFontMono-Regular.ttf")
+        # Resolve fonts directory robustly
+        font_path = _find_repo_fonts_dir()
 
-        self.base = Font(boldttf, base_size, screen_width)  # 10
-        self.bold = Font(boldttf, bold_size, screen_width)  # 12
-        self.large = Font(regularttf, large_size, screen_width)  # 15
-        self.small = Font(boldttf, small_size, screen_width)  # 8
-        self.huge = Font(boldttf, huge_size, screen_width)  # 35
+        boldttf = font_path / "RobotoMonoNerdFontMono-Bold.ttf"
+        regularttf = font_path / "RobotoMonoNerdFontMono-Regular.ttf"
 
-        self.icon_bold_large = Font(boldttf, int(base_size * 1.5), screen_width)  # 15
+        self.base = Font(str(boldttf), base_size, screen_width)
+        self.bold = Font(str(boldttf), bold_size, screen_width)
+        self.large = Font(str(regularttf), large_size, screen_width)
+        self.small = Font(str(boldttf), small_size, screen_width)
+        self.huge = Font(str(boldttf), huge_size, screen_width)
+
+        self.icon_bold_large = Font(
+            str(boldttf), int(base_size * 1.5), screen_width
+        )
