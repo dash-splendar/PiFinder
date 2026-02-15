@@ -126,6 +126,8 @@ sudo systemctl daemon-reload
 sudo systemctl enable cedar_detect
 sudo systemctl enable pifinder
 sudo systemctl disable pifinder_splash
+sudo systemctl disable --now getty@tty1.service
+sudo systemctl enable --now getty@tty2.service
 
 
 echo "PiFinder setup complete, please restart the Pi"
