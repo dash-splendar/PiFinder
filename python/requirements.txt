@@ -27,3 +27,4 @@ tqdm==4.65.0
 aiofiles==24.1.0
 protobuf>=5.26.1
 grpcio-tools>=1.71.0
+pygame

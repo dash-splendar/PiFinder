@@ -6,7 +6,7 @@ set -e
 
 cd ~pifinder/
 
-sudo apt-get install -y git python3-pip samba samba-common-bin dnsmasq hostapd dhcpd gpsd
+sudo apt-get install -y git python3-pip samba samba-common-bin dnsmasq hostapd dhcpd gpsd python3-dev build-essential libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libfreetype6-dev libportmidi-dev
 
 if [[ -d PiFinder/ ]]; then
     cd PiFinder/ && git config pull.rebase false && git pull
