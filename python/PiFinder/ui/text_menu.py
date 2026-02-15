@@ -88,8 +88,10 @@ class UITextMenu(UIModule):
         y_top = focus_y - self._s(2, min_px=1)
         y_bot = focus_y + self.fonts.large.height + self._s(2, min_px=1)
 
+        offset = self._s(5)  # tweak 1–4 until it looks right
+
         self.draw.rectangle(
-            (-1, y_top, self.display_class.resX + 1, y_bot),
+            (-1, y_top + offset, self.display_class.resX + 1, y_bot + offset),
             outline=self.colors.get(128),
             width=max(1, self._s(1, min_px=1)),
         )
