@@ -1,17 +1,27 @@
 [Unit]
 Description=PiFinder
-After=basic.target
+After=network.target cedar_detect.service
+Wants=cedar_detect.service
 
 [Service]
-Type=idle
+Type=simple
 User=pifinder
-WorkingDirectory=/home/pifinder/PiFinder/python
+WorkingDirectory=/home/pifinder
+Environment="HOME=/home/pifinder"
+Environment="XAUTHORITY=/home/pifinder/.Xauthority"
 
-Environment="VIRTUAL_ENV=/home/pifinder/PiFinder/python/.venv"
-Environment="PATH=/home/pifinder/PiFinder/python/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# Run on the physical console
+StandardInput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
 
-ExecStart=/home/pifinder/PiFinder/python/.venv/bin/python -m PiFinder.main --keyboard touch --display hyperpixel4_native --imu usb
-AmbientCapabilities=CAP_NET_BIND_SERVICE
+# Start X and run PiFinder via /home/pifinder/.xinitrc
+ExecStart=/usr/bin/xinit /home/pifinder/.xinitrc -- :0 -nolisten tcp vt1
+
+Restart=on-failure
+RestartSec=2
 
 [Install]
-WantedBy=basic.target
+WantedBy=multi-user.target

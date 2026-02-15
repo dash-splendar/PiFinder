@@ -6,13 +6,42 @@ set -e
 
 cd ~pifinder/
 
-sudo apt-get install -y git python3-pip samba samba-common-bin dnsmasq hostapd dhcpd gpsd python3-dev build-essential libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libfreetype6-dev libportmidi-dev
+sudo apt-get install -y git python3-pip samba samba-common-bin dnsmasq hostapd dhcpd gpsd python3-dev build-essential libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libfreetype6-dev libportmidi-dev xserver-xorg xinit x11-xserver-utils libgl1-mesa-dri
 
 if [[ -d PiFinder/ ]]; then
     cd PiFinder/ && git config pull.rebase false && git pull
 else
     git clone --recursive --branch release https://github.com/dash-splendar/PiFinder.git
 fi
+
+
+# -----------------------------
+# Create X session for PiFinder
+# -----------------------------
+
+XINITRC="/home/pifinder/.xinitrc"
+
+sudo -u pifinder bash -c "cat > $XINITRC" << 'EOF'
+#!/bin/sh
+cd /home/pifinder/PiFinder/python
+
+# Activate virtual environment
+. /home/pifinder/PiFinder/python/.venv/bin/activate
+
+# Force SDL to use X11
+export SDL_VIDEODRIVER=x11
+
+# Disable screen blanking / DPMS
+xset s off
+xset -dpms
+xset s noblank
+
+exec python -m PiFinder.main --keyboard touch --display hyperpixel4_native --imu usb
+EOF
+
+sudo chown pifinder:pifinder $XINITRC
+sudo chmod 755 $XINITRC
+
 
 # -----------------------------
 # Create & use Python venv
