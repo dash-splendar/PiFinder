@@ -94,7 +94,7 @@ sudo cp /home/pifinder/PiFinder/pi_config_files/cedar_detect.service /lib/system
 sudo systemctl daemon-reload
 sudo systemctl enable cedar_detect
 sudo systemctl enable pifinder
-#sudo systemctl enable pifinder_splash
+sudo systemctl disable pifinder_splash
 
 
 echo "PiFinder setup complete, please restart the Pi"
