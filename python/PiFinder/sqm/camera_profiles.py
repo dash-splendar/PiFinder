@@ -275,7 +275,12 @@ def detect_camera_type(hardware_id: str) -> str:
     # Mapping of hardware ID substrings to profile names
     hardware_mappings = {
         "imx296": "imx296",
-        "imx290": "imx462",  # IMX290 uses IMX462 profile (driver compatibility)
+        "imx462": "imx462",
+        # Arducam "pivariety" pipeline handler / IDs (often show up as arducam_pivariety@...)
+        "arducam": "imx462",
+        "pivariety": "imx462",
+        # IMX290 driver compat / DT node name (your system shows imx290@1a even though it is IMX462)
+        "imx290": "imx462",
         "imx477": "hq",
     }
 

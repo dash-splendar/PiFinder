@@ -31,7 +31,16 @@ class CameraPI(CameraInterface):
         self.exposure_time = exposure_time
 
         # Detect camera type and load complete profile (hardware config + noise characteristics)
-        self.camera_type = detect_camera_type(self.camera.camera.id)
+        cam_id = getattr(self.camera.camera, "id", "") or ""
+        try:
+            self.camera_type = detect_camera_type(cam_id)
+        except Exception:
+            # Arducam stacks often report IDs like ".../arducam_pivariety@c"
+            if "arducam" in cam_id.lower() or "pivariety" in cam_id.lower():
+                self.camera_type = "imx462"
+            else:
+                raise
+
         self.profile = get_camera_profile(self.camera_type)
         logger.info(
             f"Loaded profile for {self.camera_type}: "
@@ -49,10 +58,21 @@ class CameraPI(CameraInterface):
     def initialize(self) -> None:
         """Initializes the camera and set the needed control parameters"""
         self.stop_camera()
-        cam_config = self.camera.create_still_configuration(
-            {"size": (512, 512)},
-            raw={"size": self.profile.raw_size, "format": self.profile.format},
-        )
+        try:
+            cam_config = self.camera.create_still_configuration(
+                {"size": (512, 512)},
+                raw={"size": self.profile.raw_size, "format": self.profile.format},
+            )
+        except Exception as e:
+            logger.warning(
+                f"RAW config {self.profile.raw_size}/{self.profile.format} rejected; "
+                f"falling back to auto raw config. Error: {e}"
+            )
+            cam_config = self.camera.create_still_configuration(
+                {"size": (512, 512)},
+                raw={},  # let Picamera2 choose a valid raw stream
+            )
+
         self.camera.configure(cam_config)
         self._default_controls()
         self.start_camera()

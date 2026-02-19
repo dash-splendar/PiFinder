@@ -232,17 +232,19 @@ class CameraInterface:
                                     if self._auto_exposure_snr is None:
                                         # Use camera profile to derive thresholds
                                         try:
-                                            cam_type = detect_camera_type(self.get_cam_type())
+                                            # get_cam_type() returns e.g. "PI imx296", "PI imx462"
+                                            cam_type_str = self.get_cam_type()
+                                            cam_type = cam_type_str.split(" ")[
+                                                1].lower() if " " in cam_type_str else cam_type_str.lower()
                                             cam_type = f"{cam_type}_processed"
-                                            self._auto_exposure_snr = (
-                                                ExposureSNRController.from_camera_profile(cam_type)
-                                            )
-                                        except ValueError as e:
+                                            self._auto_exposure_snr = ExposureSNRController.from_camera_profile(
+                                                cam_type)
+                                        except Exception as e:
                                             # Unknown camera, use defaults
                                             logger.warning(
-                                                f"Camera detection failed: {e}, using default SNR thresholds"
-                                            )
+                                                f"Camera detection failed: {e}, using default SNR thresholds")
                                             self._auto_exposure_snr = ExposureSNRController()
+
                                     # Get adaptive noise floor from shared state
                                     adaptive_noise_floor = self.shared_state.noise_floor()
                                     new_exposure = self._auto_exposure_snr.update(
