@@ -6,7 +6,7 @@ set -e
 
 cd ~pifinder/
 
-sudo apt-get install -y git python3-pip samba samba-common-bin dnsmasq hostapd dhcpd gpsd python3-dev build-essential libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libfreetype6-dev libportmidi-dev xserver-xorg xinit x11-xserver-utils libgl1-mesa-dri libcap-dev python3-libcamera python3-picamera2 libcamera0 rpicam-apps
+sudo apt-get install -y git python3-pip samba samba-common-bin dnsmasq hostapd dhcpd gpsd python3-dev build-essential libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libfreetype6-dev libportmidi-dev xserver-xorg xinit x11-xserver-utils libgl1-mesa-dri libcap-dev python3-libcamera python3-picamera2 libcamera0.5 rpicam-apps
 
 if [[ -d PiFinder/ ]]; then
     cd PiFinder/ && git config pull.rebase false && git pull
