@@ -35,7 +35,7 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 
 # Install requirements inside venv (but avoid reinstalling picamera2)
-python -m pip install --no-deps -r requirements.txt
+python -m pip install -r requirements.txt
 
 # Deactivate when done
 deactivate
