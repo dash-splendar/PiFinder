@@ -6,7 +6,7 @@ set -e
 
 cd ~pifinder/
 
-sudo apt-get install -y git python3-pip samba samba-common-bin dnsmasq hostapd dhcpd gpsd python3-dev build-essential libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libfreetype6-dev libportmidi-dev xserver-xorg xinit x11-xserver-utils libgl1-mesa-dri libcap-dev
+sudo apt-get install -y git python3-pip samba samba-common-bin dnsmasq hostapd dhcpd gpsd python3-dev build-essential libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libfreetype6-dev libportmidi-dev xserver-xorg xinit x11-xserver-utils libgl1-mesa-dri libcap-dev python3-libcamera python3-picamera2 libcamera0 rpicam-apps
 
 if [[ -d PiFinder/ ]]; then
     cd PiFinder/ && git config pull.rebase false && git pull
@@ -21,22 +21,25 @@ fi
 # -----------------------------
 cd ~/PiFinder/python
 
-# Create virtual environment if it doesn't already exist
+rm -rf .venv
+
+# Create virtual environment with access to system packages
 if [[ ! -d ".venv" ]]; then
-    python3 -m venv .venv
+    python3 -m venv .venv --system-site-packages
 fi
 
 # Activate the virtual environment
 source .venv/bin/activate
 
 # Upgrade pip inside the venv
-pip install --upgrade pip
+python -m pip install --upgrade pip
 
-# Install requirements inside venv
-pip install -r requirements.txt
+# Install requirements inside venv (but avoid reinstalling picamera2)
+python -m pip install --no-deps -r requirements.txt
 
 # Deactivate when done
 deactivate
+
 
 # -----------------------------
 # Create X session for PiFinder
