@@ -60,7 +60,7 @@ xset -dpms
 xset s noblank
 xrandr --output DPI-1 --rotate left
 
-exec python -m PiFinder.main --keyboard touch --display hyperpixel4_native --imu usb
+exec python -m PiFinder.main --keyboard touch --display hyperpixel4_native --imu usb --camera pi
 EOF
 
 sudo chown pifinder:pifinder $XINITRC
