@@ -50,7 +50,7 @@ fi
 # -----------------------------
 cd ~/PiFinder/python
 
-rm -rf .venv
+#rm -rf .venv
 
 # Create virtual environment with access to system packages
 if [[ ! -d ".venv" ]]; then
