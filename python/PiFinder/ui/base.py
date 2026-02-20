@@ -336,7 +336,7 @@ class UIModule:
             y_icon = max(0, (self.display_class.titlebar_height - self.fonts.icon_bold_large.height) // 2)
 
             self.draw.text(
-                (int(self.display_class.resX * 0.80), y_icon),
+                (int(self.display_class.resX * 0.80), y_icon-3),
                 self._GPS_ICON,
                 font=self.fonts.icon_bold_large.font,
                 fill=_gps_color,
